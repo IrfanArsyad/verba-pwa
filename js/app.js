@@ -7,7 +7,9 @@ import {
   getTTSConfig, 
   saveTTSConfig, 
   TTSProvider,
-  DEFAULT_API_HOST
+  DEFAULT_API_HOST,
+  DEFAULT_STT_MODEL,
+  transcribeAudio
 } from './backend.js';
 
 // DOM Elements - View Containers
@@ -59,6 +61,8 @@ const modelSelect = document.getElementById('modelSelect');
 const ttsProviderSelect = document.getElementById('ttsProviderSelect');
 const kokoroUrlContainer = document.getElementById('kokoroUrlContainer');
 const kokoroUrlInput = document.getElementById('kokoroUrlInput');
+const sttProviderSelect = document.getElementById('sttProviderSelect');
+const sttModelInput = document.getElementById('sttModelInput');
 
 // DOM Elements - Bottom Navigation Bar (Mobile Native UI)
 const navHomeBtn = document.getElementById('navHomeBtn');
@@ -93,6 +97,8 @@ const historyBadge = document.getElementById('historyBadge');
 // App State
 let isRecording = false;
 let currentMicSource = 'voice'; // 'voice' | 'chat'
+let mediaRecorder = null; // Perekam untuk mode STT server (Whisper)
+let browserSttBlocked = false; // true setelah Web Speech ditolak (service-not-allowed)
 let recognition = null;
 let currentResult = null;
 let activeTab = 'home'; // 'home' | 'voice' | 'chat' | 'dashboard'
@@ -121,6 +127,10 @@ function loadSettings() {
 
   const savedModel = localStorage.getItem('9router_model') || 'deepseek/deepseek-chat';
   if (modelSelect) modelSelect.value = savedModel;
+
+  // Load STT Config (Web Speech vs Server Whisper)
+  if (sttProviderSelect) sttProviderSelect.value = localStorage.getItem('verba_stt_provider') || 'auto';
+  if (sttModelInput) sttModelInput.value = localStorage.getItem('verba_stt_model') || DEFAULT_STT_MODEL;
 
   // Load TTS Config (Browser vs Kokoro Homelab)
   const ttsConfig = getTTSConfig();
@@ -163,100 +173,229 @@ function updateOnlineStatus() {
 function initSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  if (!SpeechRecognition) {
-    if (micStatus) micStatus.textContent = 'Speech Recognition tidak didukung di browser ini.';
-    if (micBtn) {
-      micBtn.disabled = true;
-      micBtn.classList.add('opacity-50', 'cursor-not-allowed');
-    }
-    if (chatMicBtn) {
-      chatMicBtn.disabled = true;
-      chatMicBtn.classList.add('opacity-50', 'cursor-not-allowed');
-    }
-    return;
-  }
+  // Tanpa Web Speech API, mikrofon tetap bisa dipakai lewat STT server (Whisper).
+  if (!SpeechRecognition) return;
 
   recognition = new SpeechRecognition();
   recognition.lang = 'id-ID'; // Bahasa Indonesia
   recognition.continuous = false;
   recognition.interimResults = false;
 
-  recognition.onstart = () => {
-    isRecording = true;
-    if (currentMicSource === 'chat') {
-      if (chatMicBtn) {
-        chatMicBtn.classList.add('bg-red-600', 'text-white', 'recording-glow');
-        chatMicBtn.classList.remove('bg-slate-800', 'text-slate-300');
-      }
-      if (chatInputText) chatInputText.placeholder = 'Mendengarkan ucapan Anda...';
-    } else {
-      if (micBtn) micBtn.classList.add('recording-glow');
-      if (waveVisualizer) {
-        waveVisualizer.classList.remove('hidden');
-        waveVisualizer.classList.add('flex');
-      }
-      if (micStatus) micStatus.textContent = 'Mendengarkan... Bicara sekarang (Bahasa Indonesia)';
-    }
-  };
+  recognition.onstart = () => startRecordingUI('Mendengarkan... Bicara sekarang (Bahasa Indonesia)');
 
   recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    
-    if (currentMicSource === 'chat') {
-      if (chatInputText) chatInputText.value = transcript;
-      stopRecordingUI();
-      // Auto-send pesan chat setelah perekaman selesai
-      handleSendChatMessage();
-    } else {
-      if (textInput) textInput.value = transcript;
-      if (micStatus) micStatus.textContent = 'Suara berhasil ditangkap!';
-      stopRecordingUI();
-      // Auto-submit koreksi terjemahan setelah perekaman selesai
-      handleTranslate(transcript);
-    }
+    handleTranscript(event.results[0][0].transcript);
   };
 
   recognition.onerror = (event) => {
     console.error('Speech recognition error:', event.error);
-    if (currentMicSource === 'voice' && micStatus) {
-      micStatus.textContent = `Gagal merekam: ${event.error}`;
-    } else {
-      showToast(`Gagal merekam suara: ${event.error}`);
-    }
     stopRecordingUI();
+
+    // iOS menolak Web Speech di luar Safari / di aplikasi terpasang.
+    // Mode otomatis langsung beralih ke perekaman server.
+    if (event.error === 'service-not-allowed' && getSttProvider() !== 'browser') {
+      browserSttBlocked = true;
+      startServerRecording();
+      return;
+    }
+
+    showSttError(describeSpeechError(event.error));
   };
 
   recognition.onend = () => {
-    stopRecordingUI();
+    if (!mediaRecorder) stopRecordingUI();
   };
 }
 
-function toggleRecording(source = 'voice') {
-  if (!recognition) {
-    showToast('Browser Anda tidak mendukung Web Speech API.');
+function getSttProvider() {
+  return (sttProviderSelect && sttProviderSelect.value) || localStorage.getItem('verba_stt_provider') || 'auto';
+}
+
+function isIOSDevice() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+// Web Speech di iOS hanya diizinkan di Safari biasa (bukan Chrome/Firefox iOS, bukan PWA terpasang).
+function isWebSpeechLikelyBlocked() {
+  return isIOSDevice() && (isStandalone() || /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent));
+}
+
+function shouldUseServerStt() {
+  const provider = getSttProvider();
+  if (provider === 'server') return true;
+  if (provider === 'browser') return false;
+  return !recognition || browserSttBlocked || isWebSpeechLikelyBlocked();
+}
+
+function describeSpeechError(code) {
+  switch (code) {
+    case 'service-not-allowed':
+      return 'Browser ini tidak mengizinkan pengenalan suara. Pilih "Server Whisper" di Pengaturan, atau pakai tombol 🎤 di keyboard.';
+    case 'not-allowed':
+      return 'Izin mikrofon ditolak. Aktifkan izin mikrofon untuk situs ini di pengaturan browser.';
+    case 'no-speech':
+      return 'Tidak ada suara terdengar. Coba lagi dan bicara lebih dekat ke mikrofon.';
+    case 'audio-capture':
+      return 'Mikrofon tidak ditemukan atau sedang dipakai aplikasi lain.';
+    case 'network':
+      return 'Pengenalan suara butuh koneksi internet. Periksa jaringan Anda.';
+    default:
+      return `Gagal merekam: ${code}`;
+  }
+}
+
+function showSttError(message) {
+  if (currentMicSource === 'voice' && micStatus) {
+    micStatus.textContent = message;
+  } else {
+    showToast(message);
+  }
+}
+
+// Fokuskan kolom teks agar pengguna bisa memakai dikte bawaan keyboard.
+function focusInputForDictation() {
+  const target = currentMicSource === 'chat' ? chatInputText : textInput;
+  if (target) target.focus();
+}
+
+function handleTranscript(transcript) {
+  stopRecordingUI();
+  const text = (transcript || '').trim();
+  if (!text) {
+    showSttError('Tidak ada suara yang dikenali. Coba lagi.');
     return;
   }
 
-  if (isRecording) {
-    recognition.stop();
+  if (currentMicSource === 'chat') {
+    if (chatInputText) chatInputText.value = text;
+    // Auto-send pesan chat setelah perekaman selesai
+    handleSendChatMessage();
   } else {
-    currentMicSource = source;
-    try {
-      recognition.start();
-    } catch (err) {
-      console.warn('Recognition already active:', err);
+    if (textInput) textInput.value = text;
+    if (micStatus) micStatus.textContent = 'Suara berhasil ditangkap!';
+    // Auto-submit koreksi terjemahan setelah perekaman selesai
+    handleTranslate(text);
+  }
+}
+
+function toggleRecording(source = 'voice') {
+  if (isRecording) {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+    } else if (recognition) {
+      recognition.stop();
     }
+    return;
+  }
+
+  currentMicSource = source;
+
+  if (shouldUseServerStt()) {
+    startServerRecording();
+    return;
+  }
+
+  try {
+    recognition.start();
+  } catch (err) {
+    console.warn('Recognition already active:', err);
+  }
+}
+
+// Rekam audio dengan MediaRecorder lalu transkripsi via /v1/audio/transcriptions
+async function startServerRecording() {
+  const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || DEFAULT_API_HOST).trim();
+  const sttModel = (sttModelInput && sttModelInput.value.trim()) || localStorage.getItem('verba_stt_model') || DEFAULT_STT_MODEL;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    showSttError('Perekaman audio tidak didukung browser ini. Pakai tombol 🎤 di keyboard untuk dikte.');
+    focusInputForDictation();
+    return;
+  }
+
+  if (!apiKey) {
+    showToast('Isi API Key dulu di Pengaturan untuk rekam suara.');
+    openSettingsModal();
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    console.error('getUserMedia error:', err);
+    showSttError(describeSpeechError(err.name === 'NotAllowedError' ? 'not-allowed' : 'audio-capture'));
+    return;
+  }
+
+  const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+    .find((type) => MediaRecorder.isTypeSupported(type));
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks = [];
+  const maxDuration = setTimeout(() => {
+    if (recorder.state === 'recording') recorder.stop();
+  }, 30000);
+
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  recorder.onstop = async () => {
+    clearTimeout(maxDuration);
+    stream.getTracks().forEach((track) => track.stop());
+    mediaRecorder = null;
+    stopRecordingUI();
+
+    const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+    if (blob.size < 1000) {
+      showSttError('Rekaman terlalu pendek. Tekan mikrofon, bicara, lalu tekan lagi untuk berhenti.');
+      return;
+    }
+
+    if (currentMicSource === 'voice' && micStatus) micStatus.textContent = 'Memproses suara...';
+    try {
+      const text = await transcribeAudio(blob, apiKey, { host: apiHost, model: sttModel, language: 'id' });
+      handleTranscript(text);
+    } catch (err) {
+      console.error('Transcription error:', err);
+      showSttError(`Transkripsi gagal (${err.message}). Pastikan API Host mendukung model "${sttModel}", atau pakai tombol 🎤 di keyboard.`);
+      focusInputForDictation();
+    }
+  };
+
+  mediaRecorder = recorder;
+  recorder.start();
+  startRecordingUI('Merekam... Tekan mikrofon lagi untuk berhenti');
+}
+
+function startRecordingUI(statusText) {
+  isRecording = true;
+  if (currentMicSource === 'chat') {
+    if (chatMicBtn) {
+      chatMicBtn.classList.add('bg-red-600', 'text-white', 'recording-glow');
+      chatMicBtn.classList.remove('bg-slate-800', 'text-slate-300');
+    }
+    if (chatInputText) chatInputText.placeholder = 'Mendengarkan ucapan Anda...';
+  } else {
+    if (micBtn) micBtn.classList.add('recording-glow');
+    if (waveVisualizer) {
+      waveVisualizer.classList.remove('hidden');
+      waveVisualizer.classList.add('flex');
+    }
+    if (micStatus) micStatus.textContent = statusText;
   }
 }
 
 function stopRecordingUI() {
+  const wasRecording = isRecording;
   isRecording = false;
   if (micBtn) micBtn.classList.remove('recording-glow');
   if (waveVisualizer) {
     waveVisualizer.classList.add('hidden');
     waveVisualizer.classList.remove('flex');
   }
-  if (micStatus && micStatus.textContent === 'Mendengarkan... Bicara sekarang (Bahasa Indonesia)') {
+  if (wasRecording && micStatus && /^(Mendengarkan|Merekam)\.\.\./.test(micStatus.textContent)) {
     micStatus.textContent = 'Klik tombol mikrofon di atas untuk mulai merekam ucapan Anda';
   }
 
@@ -907,8 +1046,7 @@ function updateInstallUI() {
   const installHint = document.getElementById('installHint');
   if (!installAppBtn || !installHint) return;
 
-  const ua = navigator.userAgent;
-  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isIOS = isIOSDevice();
 
   installAppBtn.classList.toggle('hidden', !deferredInstallPrompt || isStandalone());
 
@@ -1030,6 +1168,10 @@ function attachEventListeners() {
       localStorage.setItem('9router_api_key', apiKey);
       localStorage.setItem('9router_api_host', apiHost || DEFAULT_API_HOST);
       if (modelSelect) localStorage.setItem('9router_model', selectedModel);
+
+      if (sttProviderSelect) localStorage.setItem('verba_stt_provider', sttProviderSelect.value);
+      if (sttModelInput) localStorage.setItem('verba_stt_model', sttModelInput.value.trim() || DEFAULT_STT_MODEL);
+      browserSttBlocked = false;
 
       // Save TTS Config via backend.js helper
       saveTTSConfig({
