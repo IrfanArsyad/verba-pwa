@@ -314,17 +314,45 @@ function initSpeechRecognition() {
 
   recognition = new SpeechRecognition();
   recognition.lang = 'id-ID'; // Bahasa Indonesia
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  // Safari iOS sering tidak pernah mengirim hasil final; pakai hasil sementara
+  // dan hentikan sendiri setelah pengguna diam sebentar.
+  recognition.continuous = true;
+  recognition.interimResults = true;
 
-  recognition.onstart = () => startRecordingUI('Mendengarkan... Bicara sekarang (Bahasa Indonesia)');
+  let latestTranscript = '';
+  let handled = false;
+  let silenceTimer = null;
+  let noSpeechTimer = null;
+
+  const clearTimers = () => {
+    clearTimeout(silenceTimer);
+    clearTimeout(noSpeechTimer);
+  };
+
+  recognition.onstart = () => {
+    latestTranscript = '';
+    handled = false;
+    clearTimers();
+    noSpeechTimer = setTimeout(() => recognition.stop(), 8000);
+    startRecordingUI('Mendengarkan... Bicara sekarang, berhenti otomatis saat Anda diam');
+  };
 
   recognition.onresult = (event) => {
-    handleTranscript(event.results[0][0].transcript);
+    latestTranscript = Array.from(event.results).map((r) => r[0].transcript).join(' ').trim();
+    clearTimers();
+    silenceTimer = setTimeout(() => recognition.stop(), 1500);
+    if (currentMicSource === 'voice' && micStatus && latestTranscript) {
+      micStatus.textContent = `🎙️ "${latestTranscript}"`;
+    }
   };
 
   recognition.onerror = (event) => {
     console.error('Speech recognition error:', event.error);
+    clearTimers();
+    if (event.error === 'aborted') return;
+    if (event.error === 'no-speech' && latestTranscript) return; // onend akan memproses
+
+    handled = true;
     stopRecordingUI();
 
     // iOS menolak Web Speech di luar Safari / di aplikasi terpasang.
@@ -339,7 +367,19 @@ function initSpeechRecognition() {
   };
 
   recognition.onend = () => {
-    if (!mediaRecorder) stopRecordingUI();
+    clearTimers();
+    if (mediaRecorder) return;
+    if (handled) {
+      stopRecordingUI();
+      return;
+    }
+    handled = true;
+    if (latestTranscript) {
+      handleTranscript(latestTranscript);
+    } else {
+      stopRecordingUI();
+      showSttError(describeSpeechError('no-speech'));
+    }
   };
 }
 
@@ -472,11 +512,17 @@ async function startServerRecording() {
 
   if (!ensureApiConfig(apiKey, apiHost)) return;
 
+  // AudioContext dibuat sebelum await supaya iOS menganggapnya bagian dari ketukan pengguna.
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = AudioCtx ? new AudioCtx() : null;
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
     console.error('getUserMedia error:', err);
+    if (audioCtx) audioCtx.close().catch(() => {});
     showSttError(describeSpeechError(err.name === 'NotAllowedError' ? 'not-allowed' : 'audio-capture'));
     return;
   }
@@ -489,23 +535,72 @@ async function startServerRecording() {
     if (recorder.state === 'recording') recorder.stop();
   }, 30000);
 
+  // Deteksi diam: berhenti otomatis ~1,5 detik setelah pengguna selesai bicara.
+  // Kalau AudioContext tidak bisa jalan, pengguna tetap bisa ketuk tombol untuk kirim.
+  let levelTimer = null;
+  let noSpeech = false;
+  if (audioCtx) {
+    try {
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      const samples = new Float32Array(analyser.fftSize);
+      const startedAt = Date.now();
+      let heardSpeech = false;
+      let lastLoudAt = Date.now();
+
+      levelTimer = setInterval(() => {
+        if (audioCtx.state !== 'running' || recorder.state !== 'recording') return;
+        analyser.getFloatTimeDomainData(samples);
+        let sum = 0;
+        for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+        const rms = Math.sqrt(sum / samples.length);
+        const now = Date.now();
+
+        if (rms > 0.02) {
+          heardSpeech = true;
+          lastLoudAt = now;
+        }
+        if (heardSpeech && now - lastLoudAt > 1500) {
+          recorder.stop();
+        } else if (!heardSpeech && now - startedAt > 8000) {
+          noSpeech = true;
+          recorder.stop();
+        }
+      }, 100);
+    } catch (err) {
+      console.warn('Deteksi diam tidak tersedia:', err);
+    }
+  }
+
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
 
   recorder.onstop = async () => {
     clearTimeout(maxDuration);
+    clearInterval(levelTimer);
+    if (audioCtx) audioCtx.close().catch(() => {});
     stream.getTracks().forEach((track) => track.stop());
     mediaRecorder = null;
     stopRecordingUI();
 
-    const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
-    if (blob.size < 1000) {
-      showSttError('Rekaman terlalu pendek. Tekan mikrofon, bicara, lalu tekan lagi untuk berhenti.');
+    if (noSpeech) {
+      showSttError(describeSpeechError('no-speech'));
       return;
     }
 
-    if (currentMicSource === 'voice' && micStatus) micStatus.textContent = 'Memproses suara...';
+    const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
+    if (blob.size < 1000) {
+      showSttError('Rekaman terlalu pendek. Tekan mikrofon lalu bicara.');
+      return;
+    }
+
+    if (currentMicSource === 'voice' && micStatus) {
+      micStatus.textContent = '⏳ Mengubah suara jadi teks...';
+    } else {
+      showToast('⏳ Mengubah suara jadi teks...');
+    }
     try {
       const text = await transcribeAudio(blob, apiKey, { host: apiHost, model: sttModel, language: 'id' });
       handleTranscript(text);
@@ -518,7 +613,12 @@ async function startServerRecording() {
 
   mediaRecorder = recorder;
   recorder.start();
-  startRecordingUI('Merekam... Tekan mikrofon lagi untuk berhenti');
+  startRecordingUI('Merekam... Bicara sekarang. Berhenti otomatis saat Anda diam, atau ketuk KIRIM.');
+}
+
+function setMicButtonLabel(text) {
+  const label = micBtn && micBtn.querySelector('span');
+  if (label) label.textContent = text;
 }
 
 function startRecordingUI(statusText) {
@@ -531,6 +631,7 @@ function startRecordingUI(statusText) {
     if (chatInputText) chatInputText.placeholder = 'Mendengarkan ucapan Anda...';
   } else {
     if (micBtn) micBtn.classList.add('recording-glow');
+    setMicButtonLabel('KIRIM');
     if (waveVisualizer) {
       waveVisualizer.classList.remove('hidden');
       waveVisualizer.classList.add('flex');
@@ -543,6 +644,7 @@ function stopRecordingUI() {
   const wasRecording = isRecording;
   isRecording = false;
   if (micBtn) micBtn.classList.remove('recording-glow');
+  setMicButtonLabel('REKAM');
   if (waveVisualizer) {
     waveVisualizer.classList.add('hidden');
     waveVisualizer.classList.remove('flex');
