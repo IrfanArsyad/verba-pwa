@@ -283,7 +283,10 @@
       <div class="flex items-center justify-between px-1">
         <div>
           <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Koreksi Kalimat</h2>
-          <p class="text-[13px] text-slate-500">Indonesia → English yang natural</p>
+          <button type="button" class="lang-pill mt-1 inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 pl-2.5 pr-2 py-1 text-[13px] font-semibold text-slate-700 shadow-sm hover:border-blue-300 hover:text-blue-700 transition active:scale-95">
+            <span class="lang-pill-text">🇮🇩 Indonesia → 🇬🇧 Inggris</span>
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
         </div>
         <div class="relative">
           <button id="voiceInfoBtn" type="button" class="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 shadow-sm flex items-center justify-center transition active:scale-95" title="Cara kerja" aria-expanded="false" aria-controls="voiceInfoPanel">
@@ -292,8 +295,8 @@
           <div id="voiceInfoPanel" class="hidden absolute right-0 top-12 z-30 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 space-y-3">
             <p class="text-xs font-extrabold text-slate-900">Cara kerja</p>
             <ol class="space-y-2.5 text-[13px] text-slate-700">
-              <li class="flex gap-2.5"><span class="w-5 h-5 shrink-0 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">1</span>Ucapkan atau ketik kalimat Bahasa Indonesia.</li>
-              <li class="flex gap-2.5"><span class="w-5 h-5 shrink-0 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">2</span>AI mengubahnya jadi Bahasa Inggris yang benar.</li>
+              <li class="flex gap-2.5"><span class="w-5 h-5 shrink-0 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">1</span><span class="lang-info-source">Ucapkan atau ketik kalimat Bahasa Indonesia.</span></li>
+              <li class="flex gap-2.5"><span class="w-5 h-5 shrink-0 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">2</span><span class="lang-info-target">AI mengubahnya jadi Bahasa Inggris yang benar.</span></li>
               <li class="flex gap-2.5"><span class="w-5 h-5 shrink-0 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">3</span>Dengarkan pelafalan &amp; baca penjelasan grammar.</li>
             </ol>
           </div>
@@ -346,13 +349,13 @@
       <div id="resultCard" class="hidden bg-white border border-slate-200/80 rounded-[2rem] shadow-sm overflow-hidden">
         <div class="p-5 space-y-4">
           <div class="flex items-start gap-2.5">
-            <span class="mt-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 bg-slate-100 rounded-md px-1.5 py-0.5 shrink-0">ID</span>
+            <span id="sourceBadge" class="mt-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 bg-slate-100 rounded-md px-1.5 py-0.5 shrink-0">ID</span>
             <p id="indonesianOutput" class="text-[14px] text-slate-600 leading-relaxed"></p>
           </div>
 
           <div class="rounded-2xl bg-blue-50/70 border border-blue-100 p-4">
             <div class="flex items-start gap-2.5">
-              <span class="mt-1.5 text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-100 rounded-md px-1.5 py-0.5 shrink-0">EN</span>
+              <span id="targetBadge" class="mt-1.5 text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-blue-100 rounded-md px-1.5 py-0.5 shrink-0">EN</span>
               <p id="englishOutput" class="flex-1 text-xl sm:text-2xl font-bold text-slate-900 leading-snug tracking-tight"></p>
             </div>
             <div class="mt-3 flex items-center justify-end gap-2">
@@ -397,7 +400,10 @@
               <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">VerbaAI Conversation Partner</h3>
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">Online</span>
             </div>
-            <p class="text-[11px] text-slate-500">Latih percakapan & koreksi grammar otomatis • Tersimpan lokal</p>
+            <button type="button" class="lang-pill mt-0.5 inline-flex items-center gap-1 rounded-full bg-white border border-slate-200 pl-2 pr-1.5 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-blue-300 hover:text-blue-700 transition active:scale-95">
+              <span class="lang-pill-text">🇮🇩 Indonesia → 🇬🇧 Inggris</span>
+              <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
           </div>
         </div>
         
@@ -505,7 +511,7 @@
         </div>
         <div class="bg-white border border-slate-200 p-4 rounded-2xl space-y-1 shadow-sm">
           <span class="text-xs text-slate-500 font-medium">Aksen Audio TTS</span>
-          <p class="text-base font-extrabold text-emerald-600">en-US Native</p>
+          <p id="dashTtsAccent" class="text-base font-extrabold text-emerald-600">en-US Native</p>
         </div>
         <div class="bg-white border border-slate-200 p-4 rounded-2xl space-y-1 shadow-sm">
           <span class="text-xs text-slate-500 font-medium">Status PWA</span>
@@ -748,6 +754,37 @@
           Selesai
         </button>
         <p class="mt-1.5 text-center text-[10px] text-slate-400">Perubahan tersimpan otomatis</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Language Sheet -->
+  <div id="langModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-300 opacity-0 pointer-events-none">
+    <div id="langModalContent" class="w-full max-w-md max-h-[85dvh] flex flex-col bg-white rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden transform translate-y-6 transition-transform duration-300">
+      <div class="px-5 pt-3 pb-4 border-b border-slate-100">
+        <div class="mx-auto mb-3 h-1.5 w-10 rounded-full bg-slate-200 sm:hidden"></div>
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-extrabold text-slate-900">Pilih Bahasa</h3>
+            <p class="text-[12px] text-slate-500">Dari bahasa Anda ke bahasa yang dipelajari</p>
+          </div>
+          <button id="closeLangBtn" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition active:scale-95" title="Tutup">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Bahasa saya</p>
+            <button id="swapLangBtn" type="button" class="text-[12px] font-bold text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-100 transition">⇄ Tukar</button>
+          </div>
+          <div id="sourceLangList" class="grid grid-cols-2 gap-2"></div>
+        </div>
+        <div>
+          <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-2">Bahasa yang dipelajari</p>
+          <div id="targetLangList" class="grid grid-cols-2 gap-2"></div>
+        </div>
       </div>
     </div>
   </div>
