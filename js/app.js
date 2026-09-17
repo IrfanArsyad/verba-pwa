@@ -10,7 +10,8 @@ import {
   DEFAULT_STT_MODEL,
   transcribeAudio,
   resolveChatEndpoint,
-  listModels
+  listModels,
+  unlockAudioPlayback
 } from './backend.js?v=__BUILD__';
 
 // DOM Elements - View Containers
@@ -55,7 +56,6 @@ const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const settingsModal = document.getElementById('settingsModal');
 const settingsModalContent = document.getElementById('settingsModalContent');
 const apiKeyInput = document.getElementById('apiKeyInput');
-const toggleApiKeyVisibility = document.getElementById('toggleApiKeyVisibility');
 const apiHostInput = document.getElementById('apiHostInput');
 const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
 const modelSelect = document.getElementById('modelSelect'); // input teks, sumber nilai model
@@ -65,6 +65,12 @@ const modelStatus = document.getElementById('modelStatus');
 const ttsProviderSelect = document.getElementById('ttsProviderSelect');
 const kokoroUrlContainer = document.getElementById('kokoroUrlContainer');
 const kokoroUrlInput = document.getElementById('kokoroUrlInput');
+const ttsServerContainer = document.getElementById('ttsServerContainer');
+const ttsModelInput = document.getElementById('ttsModelInput');
+const ttsVoiceInput = document.getElementById('ttsVoiceInput');
+const testVoiceBtn = document.getElementById('testVoiceBtn');
+const aiStatusPill = document.getElementById('aiStatusPill');
+const voiceStatusPill = document.getElementById('voiceStatusPill');
 const sttProviderSelect = document.getElementById('sttProviderSelect');
 const sttModelInput = document.getElementById('sttModelInput');
 const sttHostInput = document.getElementById('sttHostInput');
@@ -113,6 +119,9 @@ let chatMessages = []; // Array of { role: 'user'|'assistant', content: string }
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
+  // iOS: buka izin audio pada ketukan pertama agar jawaban bisa dibacakan otomatis
+  ['touchend', 'click'].forEach((type) => document.addEventListener(type, unlockAudioPlayback, { capture: true, passive: true }));
+  initSegmentedControls();
   loadSettings();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   initSpeechRecognition();
@@ -148,15 +157,18 @@ function loadSettings() {
   const savedSttModel = localStorage.getItem('verba_stt_model') || '';
   if (sttModelInput) sttModelInput.value = savedSttModel === 'whisper-1' && !localStorage.getItem('verba_stt_host') ? '' : savedSttModel;
 
-  // Load TTS Config (Browser vs Kokoro Homelab)
+  // Load TTS Config (Browser / Server / Kokoro)
   const ttsConfig = getTTSConfig();
-  if (ttsProviderSelect) {
-    ttsProviderSelect.value = ttsConfig.provider || TTSProvider.BROWSER;
-    toggleKokoroUrlVisibility(ttsConfig.provider);
-  }
+  if (ttsProviderSelect) ttsProviderSelect.value = ttsConfig.provider || TTSProvider.BROWSER;
   if (kokoroUrlInput) {
-    kokoroUrlInput.value = ttsConfig.kokoroUrl || 'http://localhost:8880/v1/audio/speech';
+    // Default lama localhost tidak bisa dijangkau dari HP
+    kokoroUrlInput.value = /localhost/.test(ttsConfig.kokoroUrl || '') ? '' : (ttsConfig.kokoroUrl || '');
   }
+  if (ttsModelInput) ttsModelInput.value = ttsConfig.serverModel || '';
+  if (ttsVoiceInput) ttsVoiceInput.value = ttsConfig.serverVoice || '';
+
+  refreshSegmentedControls();
+  updateVoiceFields();
 }
 
 // Simpan semua isian pengaturan ke localStorage (tanpa validasi)
@@ -173,8 +185,79 @@ function persistSettings() {
 
   saveTTSConfig({
     provider: ttsProviderSelect ? ttsProviderSelect.value : TTSProvider.BROWSER,
-    kokoroUrl: (kokoroUrlInput && kokoroUrlInput.value.trim()) || 'http://localhost:8880/v1/audio/speech'
+    kokoroUrl: kokoroUrlInput ? kokoroUrlInput.value.trim() : '',
+    serverModel: ttsModelInput ? ttsModelInput.value.trim() : '',
+    serverVoice: ttsVoiceInput ? ttsVoiceInput.value.trim() : ''
   });
+  updateVoiceFields();
+}
+
+// ---------------------------------------------------------------------------
+// Kontrol segmented: <select data-segmented> tetap jadi sumber nilai,
+// tombol-tombolnya dibuat dari <option> (teks + data-desc).
+// ---------------------------------------------------------------------------
+function initSegmentedControls() {
+  document.querySelectorAll('select[data-segmented]').forEach((select) => {
+    const container = document.querySelector(`[data-segmented-for="${select.id}"]`);
+    if (!container) return;
+    container.innerHTML = '';
+    Array.from(select.options).forEach((option) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.value = option.value;
+      btn.className = 'segmented-option text-left rounded-2xl border px-3 py-2.5 min-h-[52px] transition active:scale-[0.98]';
+      btn.innerHTML = `<span class="block text-[13px] font-bold leading-tight"></span><span class="block text-[10px] mt-0.5 opacity-70 leading-tight"></span>`;
+      btn.children[0].textContent = option.textContent;
+      btn.children[1].textContent = option.dataset.desc || '';
+      btn.addEventListener('click', () => {
+        if (select.value === option.value) return;
+        select.value = option.value;
+        select.dispatchEvent(new Event('change'));
+        refreshSegmentedControls();
+      });
+      container.appendChild(btn);
+    });
+  });
+  refreshSegmentedControls();
+}
+
+function refreshSegmentedControls() {
+  document.querySelectorAll('select[data-segmented]').forEach((select) => {
+    document.querySelectorAll(`[data-segmented-for="${select.id}"] .segmented-option`).forEach((btn) => {
+      const active = btn.dataset.value === select.value;
+      btn.classList.toggle('bg-blue-600', active);
+      btn.classList.toggle('border-blue-600', active);
+      btn.classList.toggle('text-white', active);
+      btn.classList.toggle('shadow-md', active);
+      btn.classList.toggle('shadow-blue-600/25', active);
+      btn.classList.toggle('bg-white', !active);
+      btn.classList.toggle('border-slate-200', !active);
+      btn.classList.toggle('text-slate-700', !active);
+    });
+  });
+}
+
+function setPill(pill, text, tone) {
+  if (!pill) return;
+  pill.textContent = text;
+  pill.className = 'shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full ' + ({
+    ok: 'bg-emerald-50 text-emerald-700',
+    error: 'bg-red-50 text-red-600',
+    busy: 'bg-blue-50 text-blue-600',
+    muted: 'bg-slate-100 text-slate-500'
+  }[tone] || 'bg-slate-100 text-slate-500');
+}
+
+// Tampilkan kolom sesuai pilihan suara & perbarui label status kartu Suara
+function updateVoiceFields() {
+  const ttsProvider = ttsProviderSelect ? ttsProviderSelect.value : TTSProvider.BROWSER;
+  if (kokoroUrlContainer) kokoroUrlContainer.classList.toggle('hidden', ttsProvider !== TTSProvider.KOKORO_HOMELAB);
+  if (ttsServerContainer) ttsServerContainer.classList.toggle('hidden', ttsProvider !== TTSProvider.SERVER);
+
+  const labels = { browser: 'Mic browser', server: 'Mic server', keyboard: 'Mic keyboard' };
+  const mode = getSttMode();
+  const ready = getSttServerConfig().ready;
+  setPill(voiceStatusPill, labels[mode] || 'Suara', mode === 'server' ? (ready ? 'ok' : 'error') : 'muted');
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +273,15 @@ function setModelStatus(text, tone = 'muted') {
   modelStatus.textContent = text;
   modelStatus.classList.remove('text-slate-500', 'text-red-600', 'text-emerald-600');
   modelStatus.classList.add(tone === 'error' ? 'text-red-600' : tone === 'ok' ? 'text-emerald-600' : 'text-slate-500');
+  if (text.startsWith('⏳')) {
+    setPill(aiStatusPill, 'Memeriksa...', 'busy');
+  } else if (tone === 'ok') {
+    setPill(aiStatusPill, 'Terhubung', 'ok');
+  } else if (tone === 'error') {
+    setPill(aiStatusPill, 'Bermasalah', 'error');
+  } else {
+    setPill(aiStatusPill, 'Belum diatur', 'muted');
+  }
 }
 
 function showManualModelInput(show) {
@@ -287,6 +379,7 @@ async function loadSttModelOptions() {
     sttStatus.textContent = text;
     sttStatus.classList.remove('text-slate-500', 'text-red-600', 'text-emerald-600');
     sttStatus.classList.add(tone === 'error' ? 'text-red-600' : tone === 'ok' ? 'text-emerald-600' : 'text-slate-500');
+    updateVoiceFields();
   };
 
   if (!host || !key) {
@@ -300,6 +393,9 @@ async function loadSttModelOptions() {
     const models = await listModels(host, key);
     if (seq !== sttLoadSeq) return;
     const sttModels = models.filter((id) => /whisper|transcri|stt/i.test(id));
+    const ttsModels = models.filter((id) => /tts|orpheus|playai|speech/i.test(id) && !/whisper|transcri/i.test(id));
+    const ttsList = document.getElementById('ttsModelOptions');
+    if (ttsList) ttsList.innerHTML = ttsModels.map((id) => `<option value="${id}"></option>`).join('');
     const list = document.getElementById('sttModelOptions');
     if (list) list.innerHTML = sttModels.map((id) => `<option value="${id}"></option>`).join('');
 
@@ -315,16 +411,6 @@ async function loadSttModelOptions() {
   } catch (err) {
     if (seq !== sttLoadSeq) return;
     setStatus(`❌ ${err.message}`, 'error');
-  }
-}
-
-// Toggle visibility input URL Kokoro Homelab berdasarkan provider TTS yang dipilih
-function toggleKokoroUrlVisibility(provider) {
-  if (!kokoroUrlContainer) return;
-  if (provider === TTSProvider.KOKORO_HOMELAB) {
-    kokoroUrlContainer.classList.remove('hidden');
-  } else {
-    kokoroUrlContainer.classList.add('hidden');
   }
 }
 
@@ -831,22 +917,20 @@ async function playTTS(text) {
   const targetText = text || (currentResult ? currentResult.english_text : '');
   if (!targetText) return;
 
-  speakBtn.disabled = true;
-  speakBtn.classList.add('opacity-75');
+  const buttons = [speakBtn, testVoiceBtn].filter(Boolean);
+  buttons.forEach((btn) => { btn.disabled = true; btn.classList.add('opacity-75'); });
 
   try {
-    // Menggunakan synthesizer TTS dari backend.js (otomatis memakai config tersimpan)
-    const ttsConfig = getTTSConfig();
-    const result = await synthesizeTTS(targetText, ttsConfig);
-    if (result && result.provider === TTSProvider.KOKORO_HOMELAB) {
-      showToast('🔊 Memutar audio via Kokoro Homelab TTS');
+    const { host, key } = getSttServerConfig();
+    const result = await synthesizeTTS(targetText, { ...getTTSConfig(), serverHost: host, serverKey: key });
+    if (result && result.fallbackError) {
+      showToast(`Suara server gagal, pakai suara HP. (${result.fallbackError})`);
     }
   } catch (err) {
     console.error('TTS Playback Error:', err);
-    showToast('Gagal memutar audio TTS.');
+    showToast(`🔇 ${err.message || 'Gagal memutar suara.'} Cek mode senyap & volume HP.`);
   } finally {
-    speakBtn.disabled = false;
-    speakBtn.classList.remove('opacity-75');
+    buttons.forEach((btn) => { btn.disabled = false; btn.classList.remove('opacity-75'); });
   }
 }
 
@@ -1453,24 +1537,23 @@ function attachEventListeners() {
     });
   });
 
-  // Toggle Visibility password untuk 9router API Key
-  if (toggleApiKeyVisibility && apiKeyInput) {
-    toggleApiKeyVisibility.addEventListener('click', () => {
-      const isPassword = apiKeyInput.type === 'password';
-      apiKeyInput.type = isPassword ? 'text' : 'password';
+  // Tombol lihat/sembunyikan untuk semua kolom API key
+  document.querySelectorAll('[data-toggle-password]').forEach((btn) => {
+    const input = document.getElementById(btn.dataset.togglePassword);
+    if (!input) return;
+    btn.addEventListener('click', () => {
+      input.type = input.type === 'password' ? 'text' : 'password';
     });
-  }
+  });
 
-  // TTS Provider Dropdown Selector Change
-  if (ttsProviderSelect) {
-    ttsProviderSelect.addEventListener('change', () => {
-      toggleKokoroUrlVisibility(ttsProviderSelect.value);
-    });
+  // Tes suara: dipicu ketukan, jadi aman untuk kebijakan audio iOS
+  if (testVoiceBtn) {
+    testVoiceBtn.addEventListener('click', () => playTTS('Hello! I am your VerbaAI English tutor. Let us practice together.'));
   }
 
   // Setiap isian pengaturan langsung disimpan saat diketik/diubah, jadi tidak
   // hilang walau modal ditutup tanpa menekan Simpan atau halaman dimuat ulang.
-  [apiHostInput, apiKeyInput, modelSelect, sttHostInput, sttKeyInput, sttModelInput, kokoroUrlInput].forEach((el) => {
+  [apiHostInput, apiKeyInput, modelSelect, sttHostInput, sttKeyInput, sttModelInput, kokoroUrlInput, ttsModelInput, ttsVoiceInput].forEach((el) => {
     if (el) el.addEventListener('input', persistSettings);
   });
   [sttProviderSelect, ttsProviderSelect].forEach((el) => {
@@ -1523,7 +1606,7 @@ function attachEventListeners() {
         return;
       }
 
-      showToast('⚙️ Pengaturan API & TTS tersimpan!');
+      showToast('✅ Pengaturan tersimpan');
       closeSettingsModal();
     });
   }
