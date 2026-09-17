@@ -107,6 +107,7 @@ let chatMessages = []; // Array of { role: 'user'|'assistant', content: string }
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   initSpeechRecognition();
   initOnlineStatusListener();
   registerServiceWorker();
@@ -122,8 +123,8 @@ function loadSettings() {
   const savedKey = localStorage.getItem('9router_api_key') || '';
   if (savedKey && apiKeyInput) apiKeyInput.value = savedKey;
 
-  // api.9router.com hanya website 9Router (bukan API), jadi default lama dibuang.
-  if (/api\.9router\.com/i.test(localStorage.getItem('9router_api_host') || '')) {
+  // Default lama (api.9router.com hanya website, bukan API) dibuang sekali.
+  if (localStorage.getItem('9router_api_host') === 'https://api.9router.com/v1/chat/completions') {
     localStorage.removeItem('9router_api_host');
   }
   const savedHost = localStorage.getItem('9router_api_host') || '';
@@ -145,6 +146,22 @@ function loadSettings() {
   if (kokoroUrlInput) {
     kokoroUrlInput.value = ttsConfig.kokoroUrl || 'http://localhost:8880/v1/audio/speech';
   }
+}
+
+// Simpan semua isian pengaturan ke localStorage (tanpa validasi)
+function persistSettings() {
+  if (apiKeyInput) localStorage.setItem('9router_api_key', apiKeyInput.value.trim());
+  if (apiHostInput) localStorage.setItem('9router_api_host', apiHostInput.value.trim());
+  if (modelSelect) localStorage.setItem('9router_model', modelSelect.value.trim() || 'deepseek/deepseek-chat');
+
+  if (sttProviderSelect) localStorage.setItem('verba_stt_provider', sttProviderSelect.value);
+  if (sttModelInput) localStorage.setItem('verba_stt_model', sttModelInput.value.trim() || DEFAULT_STT_MODEL);
+  browserSttBlocked = false;
+
+  saveTTSConfig({
+    provider: ttsProviderSelect ? ttsProviderSelect.value : TTSProvider.BROWSER,
+    kokoroUrl: (kokoroUrlInput && kokoroUrlInput.value.trim()) || 'http://localhost:8880/v1/audio/speech'
+  });
 }
 
 // Toggle visibility input URL Kokoro Homelab berdasarkan provider TTS yang dipilih
@@ -941,6 +958,7 @@ function closeHistoryDrawer() {
 // Buka & Tutup Modal Pengaturan
 function openSettingsModal() {
   if (!settingsModal || !settingsModalContent) return;
+  loadSettings();
   settingsModal.classList.remove('opacity-0', 'pointer-events-none');
   settingsModalContent.classList.remove('scale-95');
   settingsModalContent.classList.add('scale-100');
@@ -1157,38 +1175,28 @@ function attachEventListeners() {
     });
   }
 
+  // Setiap isian pengaturan langsung disimpan saat diketik/diubah, jadi tidak
+  // hilang walau modal ditutup tanpa menekan Simpan atau halaman dimuat ulang.
+  [apiHostInput, apiKeyInput, modelSelect, sttModelInput, kokoroUrlInput].forEach((el) => {
+    if (el) el.addEventListener('input', persistSettings);
+  });
+  [sttProviderSelect, ttsProviderSelect].forEach((el) => {
+    if (el) el.addEventListener('change', persistSettings);
+  });
+
   // Simpan Pengaturan (9router API Key + Host Endpoint + LLM Model + Provider TTS)
   if (saveApiKeyBtn) {
     saveApiKeyBtn.addEventListener('click', () => {
-      const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
-      const apiHost = apiHostInput ? apiHostInput.value.trim() : '';
-      const selectedModel = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
-      const selectedProvider = ttsProviderSelect ? ttsProviderSelect.value : TTSProvider.BROWSER;
-      const kokoroUrl = kokoroUrlInput ? kokoroUrlInput.value.trim() : '';
+      persistSettings();
 
-      if (!apiHost) {
+      if (!apiHostInput || !apiHostInput.value.trim()) {
         showToast('API Host wajib diisi (alamat server 9Router / API Anda).');
         return;
       }
-      if (!apiKey) {
+      if (!apiKeyInput || !apiKeyInput.value.trim()) {
         showToast('API Key wajib diisi.');
         return;
       }
-
-      // Save 9router Settings to localStorage
-      localStorage.setItem('9router_api_key', apiKey);
-      localStorage.setItem('9router_api_host', apiHost);
-      if (modelSelect) localStorage.setItem('9router_model', selectedModel);
-
-      if (sttProviderSelect) localStorage.setItem('verba_stt_provider', sttProviderSelect.value);
-      if (sttModelInput) localStorage.setItem('verba_stt_model', sttModelInput.value.trim() || DEFAULT_STT_MODEL);
-      browserSttBlocked = false;
-
-      // Save TTS Config via backend.js helper
-      saveTTSConfig({
-        provider: selectedProvider,
-        kokoroUrl: kokoroUrl || 'http://localhost:8880/v1/audio/speech'
-      });
 
       showToast('⚙️ Pengaturan API & TTS tersimpan!');
       closeSettingsModal();
