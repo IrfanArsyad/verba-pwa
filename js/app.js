@@ -67,6 +67,9 @@ const kokoroUrlContainer = document.getElementById('kokoroUrlContainer');
 const kokoroUrlInput = document.getElementById('kokoroUrlInput');
 const sttProviderSelect = document.getElementById('sttProviderSelect');
 const sttModelInput = document.getElementById('sttModelInput');
+const sttHostInput = document.getElementById('sttHostInput');
+const sttKeyInput = document.getElementById('sttKeyInput');
+const sttStatus = document.getElementById('sttStatus');
 
 // DOM Elements - Bottom Navigation Bar (Mobile Native UI)
 const navHomeBtn = document.getElementById('navHomeBtn');
@@ -139,7 +142,11 @@ function loadSettings() {
 
   // Load STT Config (Web Speech vs Server Whisper)
   if (sttProviderSelect) sttProviderSelect.value = localStorage.getItem('verba_stt_provider') || 'auto';
-  if (sttModelInput) sttModelInput.value = localStorage.getItem('verba_stt_model') || DEFAULT_STT_MODEL;
+  if (sttHostInput) sttHostInput.value = localStorage.getItem('verba_stt_host') || '';
+  if (sttKeyInput) sttKeyInput.value = localStorage.getItem('verba_stt_key') || '';
+  // "whisper-1" dulu jadi default padahal 9Router tidak punya model audio; kosongkan.
+  const savedSttModel = localStorage.getItem('verba_stt_model') || '';
+  if (sttModelInput) sttModelInput.value = savedSttModel === 'whisper-1' && !localStorage.getItem('verba_stt_host') ? '' : savedSttModel;
 
   // Load TTS Config (Browser vs Kokoro Homelab)
   const ttsConfig = getTTSConfig();
@@ -159,7 +166,9 @@ function persistSettings() {
   if (modelSelect) localStorage.setItem('9router_model', modelSelect.value.trim());
 
   if (sttProviderSelect) localStorage.setItem('verba_stt_provider', sttProviderSelect.value);
-  if (sttModelInput) localStorage.setItem('verba_stt_model', sttModelInput.value.trim() || DEFAULT_STT_MODEL);
+  if (sttHostInput) localStorage.setItem('verba_stt_host', sttHostInput.value.trim());
+  if (sttKeyInput) localStorage.setItem('verba_stt_key', sttKeyInput.value.trim());
+  if (sttModelInput) localStorage.setItem('verba_stt_model', sttModelInput.value.trim());
   browserSttBlocked = false;
 
   saveTTSConfig({
@@ -257,16 +266,6 @@ async function loadModelOptions() {
     showManualModelInput(selected === MANUAL_MODEL);
     setModelStatus(`✅ ${pickable.length} model tersedia.${note}`, note.includes('⚠️') ? 'error' : 'ok');
 
-    // Isi saran model Whisper untuk pengenalan suara
-    const sttModels = models.filter((id) => /whisper|transcri/i.test(id));
-    let sttList = document.getElementById('sttModelOptions');
-    if (!sttList && sttModelInput) {
-      sttList = document.createElement('datalist');
-      sttList.id = 'sttModelOptions';
-      sttModelInput.after(sttList);
-      sttModelInput.setAttribute('list', 'sttModelOptions');
-    }
-    if (sttList) sttList.innerHTML = sttModels.map((id) => `<option value="${id}"></option>`).join('');
   } catch (err) {
     if (seq !== modelLoadSeq) return;
     console.error('Gagal memuat model:', err);
@@ -276,6 +275,46 @@ async function loadModelOptions() {
     setModelStatus(`❌ ${err.message}`, 'error');
   } finally {
     if (seq === modelLoadSeq && refreshModelsBtn) refreshModelsBtn.disabled = false;
+  }
+}
+
+// Cek server STT & isi saran model transkripsi dari {sttHost}/v1/models
+let sttLoadSeq = 0;
+async function loadSttModelOptions() {
+  if (!sttStatus) return;
+  const { host, key } = getSttServerConfig();
+  const setStatus = (text, tone) => {
+    sttStatus.textContent = text;
+    sttStatus.classList.remove('text-slate-500', 'text-red-600', 'text-emerald-600');
+    sttStatus.classList.add(tone === 'error' ? 'text-red-600' : tone === 'ok' ? 'text-emerald-600' : 'text-slate-500');
+  };
+
+  if (!host || !key) {
+    setStatus(host || key ? 'Isi STT Host dan STT API Key. Kalau kosong, mikrofon memakai dikte keyboard HP.' : 'Kosong = mikrofon memakai dikte keyboard HP. Gratis: daftar di console.groq.com, host https://api.groq.com/openai.', 'muted');
+    return;
+  }
+
+  const seq = ++sttLoadSeq;
+  setStatus('⏳ Memeriksa server STT...', 'muted');
+  try {
+    const models = await listModels(host, key);
+    if (seq !== sttLoadSeq) return;
+    const sttModels = models.filter((id) => /whisper|transcri|stt/i.test(id));
+    const list = document.getElementById('sttModelOptions');
+    if (list) list.innerHTML = sttModels.map((id) => `<option value="${id}"></option>`).join('');
+
+    if (sttModels.length === 0) {
+      setStatus('⚠️ Server terhubung, tapi tidak ada model speech-to-text (whisper). Pakai Groq/OpenAI.', 'error');
+      return;
+    }
+    if (sttModelInput && !sttModelInput.value.trim()) {
+      sttModelInput.value = sttModels.find((id) => id === 'whisper-large-v3') || sttModels[0];
+      persistSettings();
+    }
+    setStatus(`✅ Server STT siap. Model: ${getSttServerConfig().model}`, 'ok');
+  } catch (err) {
+    if (seq !== sttLoadSeq) return;
+    setStatus(`❌ ${err.message}`, 'error');
   }
 }
 
@@ -359,7 +398,11 @@ function initSpeechRecognition() {
     // Mode otomatis langsung beralih ke perekaman server.
     if (event.error === 'service-not-allowed' && getSttProvider() !== 'browser') {
       browserSttBlocked = true;
-      startServerRecording();
+      if (getSttServerConfig().ready) {
+        startServerRecording();
+      } else {
+        startKeyboardDictation();
+      }
       return;
     }
 
@@ -416,17 +459,44 @@ function isWebSpeechLikelyBlocked() {
   return isIOSDevice() && (isStandalone() || /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent));
 }
 
-function shouldUseServerStt() {
+function getSttServerConfig() {
+  const host = ((sttHostInput ? sttHostInput.value : localStorage.getItem('verba_stt_host')) || '').trim();
+  const key = ((sttKeyInput ? sttKeyInput.value : localStorage.getItem('verba_stt_key')) || '').trim();
+  const typedModel = ((sttModelInput ? sttModelInput.value : localStorage.getItem('verba_stt_model')) || '').trim();
+  const model = typedModel || (/groq\.com/i.test(host) ? 'whisper-large-v3' : DEFAULT_STT_MODEL);
+  return { host, key, model, ready: Boolean(host && key) };
+}
+
+// Tentukan cara menangkap suara: 'browser' | 'server' | 'keyboard'
+function getSttMode() {
   const provider = getSttProvider();
-  if (provider === 'server') return true;
-  if (provider === 'browser') return false;
-  return !recognition || browserSttBlocked || isWebSpeechLikelyBlocked();
+  if (provider === 'keyboard') return 'keyboard';
+  if (provider === 'server') return 'server';
+  if (provider === 'browser') return recognition ? 'browser' : 'keyboard';
+  if (recognition && !browserSttBlocked && !isWebSpeechLikelyBlocked()) return 'browser';
+  return getSttServerConfig().ready ? 'server' : 'keyboard';
+}
+
+// Tanpa server STT: buka keyboard supaya pengguna bisa pakai tombol 🎤 dikte bawaan HP.
+function startKeyboardDictation() {
+  const target = currentMicSource === 'chat' ? chatInputText : textInput;
+  const message = '⌨️ Ketuk 🎤 di keyboard HP, bicara, lalu tekan Kirim.';
+  if (target) {
+    target.focus();
+    target.classList.add('ring-4', 'ring-blue-500/30', 'border-blue-500');
+    setTimeout(() => target.classList.remove('ring-4', 'ring-blue-500/30', 'border-blue-500'), 4000);
+  }
+  if (currentMicSource === 'voice' && micStatus) {
+    micStatus.textContent = message;
+  } else {
+    showToast(message);
+  }
 }
 
 function describeSpeechError(code) {
   switch (code) {
     case 'service-not-allowed':
-      return 'Browser ini tidak mengizinkan pengenalan suara. Pilih "Server Whisper" di Pengaturan, atau pakai tombol 🎤 di keyboard.';
+      return 'Browser ini tidak mengizinkan pengenalan suara. Isi server STT di Pengaturan, atau pakai tombol 🎤 di keyboard.';
     case 'not-allowed':
       return 'Izin mikrofon ditolak. Aktifkan izin mikrofon untuk situs ini di pengaturan browser.';
     case 'no-speech':
@@ -446,12 +516,6 @@ function showSttError(message) {
   } else {
     showToast(message);
   }
-}
-
-// Fokuskan kolom teks agar pengguna bisa memakai dikte bawaan keyboard.
-function focusInputForDictation() {
-  const target = currentMicSource === 'chat' ? chatInputText : textInput;
-  if (target) target.focus();
 }
 
 function handleTranscript(transcript) {
@@ -486,7 +550,12 @@ function toggleRecording(source = 'voice') {
 
   currentMicSource = source;
 
-  if (shouldUseServerStt()) {
+  const mode = getSttMode();
+  if (mode === 'keyboard') {
+    startKeyboardDictation();
+    return;
+  }
+  if (mode === 'server') {
     startServerRecording();
     return;
   }
@@ -500,17 +569,18 @@ function toggleRecording(source = 'voice') {
 
 // Rekam audio dengan MediaRecorder lalu transkripsi via /v1/audio/transcriptions
 async function startServerRecording() {
-  const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
-  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || '').trim();
-  const sttModel = (sttModelInput && sttModelInput.value.trim()) || localStorage.getItem('verba_stt_model') || DEFAULT_STT_MODEL;
+  const { host: sttHost, key: sttKey, model: sttModel, ready } = getSttServerConfig();
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
-    showSttError('Perekaman audio tidak didukung browser ini. Pakai tombol 🎤 di keyboard untuk dikte.');
-    focusInputForDictation();
+    startKeyboardDictation();
     return;
   }
 
-  if (!ensureApiConfig(apiKey, apiHost)) return;
+  if (!ready) {
+    showToast('Isi STT API Host & STT API Key dulu di Pengaturan.');
+    openSettingsModal();
+    return;
+  }
 
   // AudioContext dibuat sebelum await supaya iOS menganggapnya bagian dari ketukan pengguna.
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -602,12 +672,11 @@ async function startServerRecording() {
       showToast('⏳ Mengubah suara jadi teks...');
     }
     try {
-      const text = await transcribeAudio(blob, apiKey, { host: apiHost, model: sttModel, language: 'id' });
+      const text = await transcribeAudio(blob, sttKey, { host: sttHost, model: sttModel, language: 'id' });
       handleTranscript(text);
     } catch (err) {
       console.error('Transcription error:', err);
-      showSttError(`Transkripsi gagal (${err.message}). Pastikan API Host mendukung model "${sttModel}", atau pakai tombol 🎤 di keyboard.`);
-      focusInputForDictation();
+      showSttError(`Transkripsi gagal (${err.message}). Cek STT Host/Key/model "${sttModel}", atau pakai tombol 🎤 di keyboard.`);
     }
   };
 
@@ -1182,6 +1251,7 @@ function openSettingsModal() {
   if (!settingsModal || !settingsModalContent) return;
   loadSettings();
   loadModelOptions();
+  loadSttModelOptions();
   settingsModal.classList.remove('opacity-0', 'pointer-events-none');
   settingsModalContent.classList.remove('scale-95');
   settingsModalContent.classList.add('scale-100');
@@ -1400,7 +1470,7 @@ function attachEventListeners() {
 
   // Setiap isian pengaturan langsung disimpan saat diketik/diubah, jadi tidak
   // hilang walau modal ditutup tanpa menekan Simpan atau halaman dimuat ulang.
-  [apiHostInput, apiKeyInput, modelSelect, sttModelInput, kokoroUrlInput].forEach((el) => {
+  [apiHostInput, apiKeyInput, modelSelect, sttHostInput, sttKeyInput, sttModelInput, kokoroUrlInput].forEach((el) => {
     if (el) el.addEventListener('input', persistSettings);
   });
   [sttProviderSelect, ttsProviderSelect].forEach((el) => {
@@ -1417,6 +1487,14 @@ function attachEventListeners() {
     });
   });
   if (refreshModelsBtn) refreshModelsBtn.addEventListener('click', loadModelOptions);
+  let sttReloadTimer = null;
+  [sttHostInput, sttKeyInput].forEach((el) => {
+    if (!el) return;
+    el.addEventListener('input', () => {
+      clearTimeout(sttReloadTimer);
+      sttReloadTimer = setTimeout(loadSttModelOptions, 900);
+    });
+  });
   if (modelPicker) {
     modelPicker.addEventListener('change', () => {
       if (modelPicker.value === MANUAL_MODEL) {
