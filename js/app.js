@@ -6,7 +6,8 @@ import {
   ChatHistoryManager,
   getTTSConfig, 
   saveTTSConfig, 
-  TTSProvider 
+  TTSProvider,
+  DEFAULT_API_HOST
 } from './backend.js';
 
 // DOM Elements - View Containers
@@ -103,6 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSpeechRecognition();
   initOnlineStatusListener();
   registerServiceWorker();
+  initInstallPrompt();
   renderHistoryList();
   loadSavedChatHistory();
   attachEventListeners();
@@ -114,7 +116,7 @@ function loadSettings() {
   const savedKey = localStorage.getItem('9router_api_key') || '';
   if (savedKey && apiKeyInput) apiKeyInput.value = savedKey;
 
-  const savedHost = localStorage.getItem('9router_api_host') || 'https://api.9router.com/v1/chat/completions';
+  const savedHost = localStorage.getItem('9router_api_host') || DEFAULT_API_HOST;
   if (savedHost && apiHostInput) apiHostInput.value = savedHost;
 
   const savedModel = localStorage.getItem('9router_model') || 'deepseek/deepseek-chat';
@@ -271,8 +273,8 @@ function stopRecordingUI() {
 async function handleTranslate(inputOverride) {
   const text = (inputOverride || textInput.value).trim();
   const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
-  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || 'https://api.9router.com/v1/chat/completions').trim();
-  const selectedModel = modelSelect ? modelSelect.value : 'deepseek/deepseek-chat';
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || DEFAULT_API_HOST).trim();
+  const selectedModel = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
 
   if (!text) {
     showToast('Masukkan kalimat Bahasa Indonesia terlebih dahulu.');
@@ -280,13 +282,14 @@ async function handleTranslate(inputOverride) {
   }
 
   if (!apiKey) {
-    showToast('Masukkan 9router API Key di pengaturan.');
+    showToast('Isi API Key dulu di Pengaturan.');
+    openSettingsModal();
     return;
   }
 
   // Simpan Pengaturan API Key & Model & Host
   localStorage.setItem('9router_api_key', apiKey);
-  localStorage.setItem('9router_api_host', apiHost || 'https://api.9router.com/v1/chat/completions');
+  localStorage.setItem('9router_api_host', apiHost || DEFAULT_API_HOST);
   if (modelSelect) localStorage.setItem('9router_model', selectedModel);
 
   // Tampilkan UI Loading State
@@ -296,7 +299,7 @@ async function handleTranslate(inputOverride) {
     // Panggil Layanan Backend AI (9router API)
     const result = await processIndonesianToEnglish(text, apiKey, {
       model: selectedModel,
-      endpoint: apiHost || 'https://api.9router.com/v1/chat/completions'
+      endpoint: apiHost || DEFAULT_API_HOST
     });
 
     currentResult = result;
@@ -555,7 +558,7 @@ function loadSavedChatHistory() {
 async function handleSendChatMessage() {
   const text = (chatInputText ? chatInputText.value : '').trim();
   const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
-  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || 'https://api.9router.com/v1/chat/completions').trim();
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || DEFAULT_API_HOST).trim();
 
   if (!text) {
     showToast('Tulis atau ucapkan pesan terlebih dahulu.');
@@ -563,7 +566,8 @@ async function handleSendChatMessage() {
   }
 
   if (!apiKey) {
-    showToast('Masukkan 9router API Key di pengaturan.');
+    showToast('Isi API Key dulu di Pengaturan.');
+    openSettingsModal();
     return;
   }
 
@@ -588,10 +592,10 @@ async function handleSendChatMessage() {
 
   try {
     // 4. Panggil Backend processChatConversation dari backend.js
-    const selectedModel = modelSelect ? modelSelect.value : 'deepseek/deepseek-chat';
+    const selectedModel = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
     const result = await processChatConversation(chatMessages, apiKey, { 
       model: selectedModel,
-      endpoint: apiHost || 'https://api.9router.com/v1/chat/completions'
+      endpoint: apiHost || DEFAULT_API_HOST
     });
 
     // 5. Sembunyikan Typing Indicator
@@ -872,13 +876,78 @@ function showToast(message) {
 
 // PWA Service Worker Registration
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('Service Worker terdaftar:', reg.scope))
-        .catch(err => console.error('Gagal pendaftaran Service Worker:', err));
+  if (!('serviceWorker' in navigator)) return;
+
+  // Saat service worker versi baru mengambil alih, muat ulang sekali agar
+  // halaman langsung memakai file terbaru (bukan sisa cache lama).
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => reg.update())
+      .catch(err => console.error('Gagal pendaftaran Service Worker:', err));
+  });
+}
+
+// PWA Install (Android: prompt bawaan, iOS: petunjuk Add to Home Screen)
+let deferredInstallPrompt = null;
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function updateInstallUI() {
+  const installAppBtn = document.getElementById('installAppBtn');
+  const installHint = document.getElementById('installHint');
+  if (!installAppBtn || !installHint) return;
+
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  installAppBtn.classList.toggle('hidden', !deferredInstallPrompt || isStandalone());
+
+  if (isStandalone()) {
+    installHint.textContent = '✅ VerbaAI sudah terpasang di perangkat ini.';
+  } else if (deferredInstallPrompt) {
+    installHint.textContent = 'Tekan tombol di atas untuk memasang VerbaAI seperti aplikasi biasa.';
+  } else if (isIOS) {
+    installHint.innerHTML = 'Di iPhone/iPad: tekan tombol <b>Share</b> (ikon kotak dengan panah ke atas) di Safari atau Chrome, lalu pilih <b>Add to Home Screen / Tambah ke Layar Utama</b>.';
+  } else {
+    installHint.innerHTML = 'Buka menu browser (⋮) lalu pilih <b>Install app / Tambahkan ke layar utama</b>.';
+  }
+}
+
+function initInstallPrompt() {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    updateInstallUI();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    updateInstallUI();
+    showToast('📲 VerbaAI berhasil dipasang!');
+  });
+
+  const installAppBtn = document.getElementById('installAppBtn');
+  if (installAppBtn) {
+    installAppBtn.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      updateInstallUI();
     });
   }
+
+  updateInstallUI();
 }
 
 // 7. Event Listeners Setup
@@ -948,18 +1017,18 @@ function attachEventListeners() {
     saveApiKeyBtn.addEventListener('click', () => {
       const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
       const apiHost = apiHostInput ? apiHostInput.value.trim() : '';
-      const selectedModel = modelSelect ? modelSelect.value : 'deepseek/deepseek-chat';
+      const selectedModel = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
       const selectedProvider = ttsProviderSelect ? ttsProviderSelect.value : TTSProvider.BROWSER;
       const kokoroUrl = kokoroUrlInput ? kokoroUrlInput.value.trim() : '';
 
       if (!apiKey) {
-        showToast('Masukkan 9router API Key yang valid.');
+        showToast('API Key wajib diisi.');
         return;
       }
 
       // Save 9router Settings to localStorage
       localStorage.setItem('9router_api_key', apiKey);
-      localStorage.setItem('9router_api_host', apiHost || 'https://api.9router.com/v1/chat/completions');
+      localStorage.setItem('9router_api_host', apiHost || DEFAULT_API_HOST);
       if (modelSelect) localStorage.setItem('9router_model', selectedModel);
 
       // Save TTS Config via backend.js helper

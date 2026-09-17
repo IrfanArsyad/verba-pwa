@@ -50,6 +50,21 @@ The JSON schema MUST follow this exact structure:
 // ============================================================================
 // 2. 9ROUTER API REQUEST HANDLER & JSON PARSER
 // ============================================================================
+export const DEFAULT_API_HOST = 'https://api.9router.com';
+
+/**
+ * Ubah isian host dari pengaturan menjadi URL chat completions lengkap.
+ * Menerima domain saja ("api.domain.com"), base URL ("https://x/v1"),
+ * atau URL endpoint lengkap ("https://x/v1/chat/completions").
+ */
+export function resolveChatEndpoint(host) {
+  let url = (host || '').trim() || DEFAULT_API_HOST;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  url = url.replace(/\/+$/, '');
+  if (/\/chat\/completions$/i.test(url)) return url;
+  if (/\/v\d+$/i.test(url)) return url + '/chat/completions';
+  return url + '/v1/chat/completions';
+}
 
 /**
  * Mengirim permintaan terjemahan & koreksi tata bahasa ke API 9router
@@ -59,7 +74,7 @@ The JSON schema MUST follow this exact structure:
  * @returns {Promise<{indonesian_input: string, english_text: string, explanation: string}>}
  */
 export async function processIndonesianToEnglish(indonesianInput, apiKey, options = {}) {
-  const endpoint = options.endpoint || 'https://api.9router.com/v1/chat/completions';
+  const endpoint = resolveChatEndpoint(options.endpoint);
   const model = options.model || 'deepseek/deepseek-chat';
 
   // Validasi API Key
@@ -122,7 +137,7 @@ export async function processIndonesianToEnglish(indonesianInput, apiKey, option
  * @returns {Promise<{reply: string, correction: string, translation: string}>}
  */
 export async function processChatConversation(messages = [], apiKey, options = {}) {
-  const endpoint = options.endpoint || 'https://api.9router.com/v1/chat/completions';
+  const endpoint = resolveChatEndpoint(options.endpoint);
   const model = options.model || 'deepseek/deepseek-chat';
   const temperature = options.temperature !== undefined ? options.temperature : 0.7;
 
