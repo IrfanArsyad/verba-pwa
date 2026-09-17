@@ -15,7 +15,9 @@ import {
   LANGUAGES,
   getLanguage,
   DEFAULT_SOURCE_LANG,
-  DEFAULT_TARGET_LANG
+  DEFAULT_TARGET_LANG,
+  generateVocabulary,
+  VocabManager
 } from './backend.js?v=__BUILD__';
 
 // DOM Elements - View Containers
@@ -23,6 +25,7 @@ const homeView = document.getElementById('homeView');
 const voiceView = document.getElementById('voiceView');
 const chatViewCard = document.getElementById('chatViewCard');
 const dashboardView = document.getElementById('dashboardView');
+const vocabView = document.getElementById('vocabView');
 
 // DOM Elements - Home Launcher & Widgets
 const quickVoiceCard = document.getElementById('quickVoiceCard');
@@ -35,7 +38,9 @@ const sodEnglish = document.getElementById('sodEnglish');
 // DOM Elements - Dashboard View Controls
 const dashClearAllBtn = document.getElementById('dashClearAllBtn');
 const dashTotalSentences = document.getElementById('dashTotalSentences');
-const dashVoiceInteractions = document.getElementById('dashVoiceInteractions');
+const dashVocabLearned = document.getElementById('dashVocabLearned');
+const dashStreak = document.getElementById('dashStreak');
+const dashHistoryCount = document.getElementById('dashHistoryCount');
 const dashHistoryList = document.getElementById('dashHistoryList');
 
 // DOM Elements - Voice & Text Input
@@ -86,7 +91,7 @@ const navHomeBtn = document.getElementById('navHomeBtn');
 const navVoiceBtn = document.getElementById('navVoiceBtn');
 const navChatBtn = document.getElementById('navChatBtn');
 const navDashboardBtn = document.getElementById('navDashboardBtn');
-const navPengaturanBtn = document.getElementById('navPengaturanBtn');
+const navVocabBtn = document.getElementById('navVocabBtn');
 const navHistoryBadge = document.getElementById('navHistoryBadge');
 
 // DOM Elements - Result & Loading Cards
@@ -117,6 +122,7 @@ let currentMicSource = 'voice'; // 'voice' | 'chat'
 let mediaRecorder = null; // Perekam untuk mode STT server (Whisper)
 let sourceLang = DEFAULT_SOURCE_LANG;
 let targetLang = DEFAULT_TARGET_LANG;
+let vocabCount = Number(localStorage.getItem('verba_vocab_count')) || 5;
 let browserSttBlocked = false; // true setelah Web Speech ditolak (service-not-allowed)
 let recognition = null;
 let currentResult = null;
@@ -241,6 +247,7 @@ function applyLanguages() {
   if (dashAccent) dashAccent.textContent = `${target.speech} Native`;
   if (recognition) recognition.lang = source.speech;
   renderLanguageLists();
+  if (vocabView && !vocabView.classList.contains('hidden')) renderVocab();
 }
 
 function openLangModal() {
@@ -1097,8 +1104,14 @@ function renderHistoryList() {
   // Update Badge Riwayat di Header & Bottom Navigation Bar & Dashboard
   const historyCount = history.length;
   if (homeTotalCount) homeTotalCount.textContent = historyCount;
+  const homeStreak = document.getElementById('homeStreak');
+  const homeVocabCount = document.getElementById('homeVocabCount');
+  if (homeStreak) homeStreak.textContent = VocabManager.getStreak();
+  if (homeVocabCount) homeVocabCount.textContent = VocabManager.countLearned();
   if (dashTotalSentences) dashTotalSentences.textContent = historyCount;
-  if (dashVoiceInteractions) dashVoiceInteractions.textContent = historyCount > 0 ? historyCount * 2 : 0;
+  if (dashHistoryCount) dashHistoryCount.textContent = historyCount;
+  if (dashVocabLearned) dashVocabLearned.textContent = VocabManager.countLearned();
+  if (dashStreak) dashStreak.textContent = VocabManager.getStreak();
 
   [historyBadge, navHistoryBadge].forEach(badge => {
     if (badge) {
@@ -1122,38 +1135,33 @@ function renderListContainer(containerEl, history, isDrawer = false) {
   // Jika riwayat kosong
   if (history.length === 0) {
     containerEl.innerHTML = `
-      <div class="text-center py-10 space-y-2 border border-dashed border-slate-200 rounded-2xl bg-slate-50">
-        <div class="inline-flex p-3 bg-slate-100 rounded-full text-slate-400 mb-1">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
-        </div>
-        <p class="text-slate-800 text-xs font-bold">Belum Ada Riwayat Belajar</p>
-        <p class="text-slate-500 text-[11px]">Hasil terjemahan & koreksi AI akan tersimpan di sini.</p>
-      </div>
-    `;
+      <div class="text-center py-10 space-y-1.5 border border-dashed border-slate-200 rounded-2xl">
+        <div class="text-2xl">🗒️</div>
+        <p class="text-[13px] font-bold text-slate-700">Belum ada riwayat</p>
+        <p class="text-[12px] text-slate-500">Hasil koreksi akan tersimpan di sini.</p>
+      </div>`;
     return;
   }
 
-  // Render Item Riwayat (Light Modern Card Style)
+  // Render Item Riwayat (kartu ringkas)
   containerEl.innerHTML = history.map(item => `
-    <div class="history-item bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2 hover:border-blue-400 hover:bg-white transition cursor-pointer group shadow-sm" data-id="${item.id}">
-      <div class="flex items-center justify-between text-[11px] text-slate-500">
-        <span class="truncate max-w-[200px] font-semibold text-slate-700">${escapeHTML(item.indonesian_input)}</span>
-        <span class="text-slate-400 text-[10px]">${formatTimestamp(item.timestamp)}</span>
+    <div class="history-item bg-white border border-slate-200 rounded-2xl p-3.5 hover:border-blue-300 transition cursor-pointer" data-id="${item.id}">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0 flex-1">
+          <p class="text-[14px] font-bold text-slate-900 leading-snug">${escapeHTML(item.english_text)}</p>
+          <p class="mt-0.5 text-[12px] text-slate-500 truncate">${escapeHTML(item.indonesian_input)}</p>
+        </div>
+        <span class="text-[10px] text-slate-400 font-semibold shrink-0 pt-0.5">${formatTimestamp(item.timestamp)}</span>
       </div>
-      <p class="text-xs font-bold text-blue-600 group-hover:text-blue-700 transition leading-snug">${escapeHTML(item.english_text)}</p>
-      
-      <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-200">
-        <button class="play-hist-btn h-7 px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold flex items-center gap-1 transition active:scale-95" title="Putar Suara">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 9 0 0118 0z"/></svg>
-          <span class="hidden sm:inline">Putar</span>
+      <div class="flex items-center gap-1.5 mt-2.5">
+        <button class="play-hist-btn w-9 h-9 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition active:scale-95" title="Dengarkan" aria-label="Dengarkan">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5.14v13.72a1 1 0 001.5.86l11.14-6.86a1 1 0 000-1.72L9.5 4.28A1 1 0 008 5.14z"/></svg>
         </button>
-        <button class="copy-hist-btn h-7 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold flex items-center gap-1 transition active:scale-95" title="Salin Teks">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-          <span class="hidden sm:inline">Salin</span>
+        <button class="copy-hist-btn w-9 h-9 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition active:scale-95" title="Salin" aria-label="Salin">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M5 15V6a2 2 0 012-2h9"/></svg>
         </button>
-        <button class="delete-hist-btn h-7 px-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-[11px] font-bold flex items-center gap-1 transition active:scale-95" title="Hapus Riwayat">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-          <span class="hidden sm:inline">Hapus</span>
+        <button class="delete-hist-btn w-9 h-9 ml-auto rounded-full bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 flex items-center justify-center transition active:scale-95" title="Hapus" aria-label="Hapus">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
         </button>
       </div>
     </div>
@@ -1318,17 +1326,12 @@ async function handleSendChatMessage() {
 function appendUserMessageUI(text, timestamp = Date.now()) {
   if (!chatMessageList) return;
   const userDiv = document.createElement('div');
-  userDiv.className = 'flex items-start justify-end gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-300';
+  userDiv.className = 'flex flex-col items-end gap-1';
   userDiv.innerHTML = `
-    <div class="space-y-1 max-w-[85%] sm:max-w-[78%] text-right">
-      <div class="bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 text-white rounded-2xl rounded-tr-sm p-4 text-xs sm:text-sm shadow-md shadow-blue-600/20 text-left border border-blue-400/30">
-        <p class="leading-relaxed whitespace-pre-wrap font-medium">${escapeHTML(text)}</p>
-      </div>
-      <span class="text-[10px] text-slate-400 font-semibold pr-1">${formatTimestamp(timestamp)}</span>
+    <div class="max-w-[85%] rounded-2xl rounded-br-md bg-blue-600 text-white px-4 py-2.5 shadow-sm">
+      <p class="text-[14px] leading-relaxed whitespace-pre-wrap">${escapeHTML(text)}</p>
     </div>
-    <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0 text-xs font-extrabold mt-1">
-      👤
-    </div>
+    <span class="text-[10px] text-slate-400 pr-1">${formatTimestamp(timestamp)}</span>
   `;
   chatMessageList.appendChild(userDiv);
 }
@@ -1339,57 +1342,48 @@ function appendUserMessageUI(text, timestamp = Date.now()) {
 function appendAIMessageUI(data, timestamp = Date.now()) {
   if (!chatMessageList) return;
   const aiDiv = document.createElement('div');
-  aiDiv.className = 'flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300';
+  aiDiv.className = 'flex flex-col items-start gap-1';
 
   const replyText = data.reply || data.content || 'No response generated.';
   const correctionText = data.correction || '';
   const translationText = data.translation || '';
 
   aiDiv.innerHTML = `
-    <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0 text-xs font-extrabold mt-1">
-      🤖
-    </div>
-    <div class="space-y-1.5 max-w-[85%] sm:max-w-[78%]">
-      <div class="bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-sm p-4 text-xs sm:text-sm text-slate-800 shadow-sm space-y-3">
-        
-        <!-- Reply Text (English Highlighted) -->
-        <div class="space-y-1">
-          <p class="font-extrabold text-slate-900 text-sm sm:text-base leading-relaxed tracking-tight">${escapeHTML(replyText)}</p>
-        </div>
-        
-        <!-- Grammar Correction Box (if errors found) -->
-        ${correctionText ? `
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-900 text-xs space-y-1 shadow-inner">
-          <div class="flex items-center gap-1.5 text-[11px] font-bold text-amber-700">
-            <span>✏️ Catatan Tata Bahasa (Grammar):</span>
-          </div>
-          <p class="leading-relaxed font-medium">${escapeHTML(correctionText)}</p>
-        </div>` : ''}
+    <div class="max-w-[88%] rounded-2xl rounded-tl-md bg-white border border-slate-200 px-4 py-3 shadow-sm space-y-2.5">
+      <p class="text-[15px] font-semibold text-slate-900 leading-relaxed">${escapeHTML(replyText)}</p>
 
-        <!-- Translation Box -->
-        ${translationText ? `
-        <div class="bg-white p-2.5 rounded-xl border border-slate-200 text-[11px] text-slate-600 italic">
-          ${getLanguage(sourceLang).flag} ${escapeHTML(translationText)}
-        </div>` : ''}
+      ${translationText ? `
+      <button class="chat-translate-btn text-[12px] font-semibold text-blue-600 hover:text-blue-700 transition">
+        ${getLanguage(sourceLang).flag} Lihat terjemahan
+      </button>
+      <p class="chat-translation hidden text-[13px] text-slate-500 leading-relaxed">${escapeHTML(translationText)}</p>` : ''}
 
-        <!-- Actions: Quick TTS Speaker & Copy -->
-        <div class="flex items-center justify-between pt-2 border-t border-slate-200">
-          <span class="text-[10px] text-slate-400 font-semibold">${formatTimestamp(timestamp)}</span>
-          <div class="flex items-center gap-1.5">
-            <button class="chat-speak-btn px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold flex items-center gap-1 transition active:scale-95" title="Putar Suara English">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
-              <span>Putar</span>
-            </button>
-            <button class="chat-copy-btn px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold flex items-center gap-1 transition active:scale-95" title="Salin Teks English">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-              <span>Salin</span>
-            </button>
-          </div>
-        </div>
+      ${correctionText ? `
+      <div class="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2">
+        <p class="text-[11px] font-bold text-amber-700 mb-0.5">✏️ Koreksi</p>
+        <p class="text-[13px] text-amber-900 leading-relaxed">${escapeHTML(correctionText)}</p>
+      </div>` : ''}
 
+      <div class="flex items-center gap-1.5 pt-0.5">
+        <button class="chat-speak-btn w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition active:scale-95" title="Dengarkan" aria-label="Dengarkan">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5.14v13.72a1 1 0 001.5.86l11.14-6.86a1 1 0 000-1.72L9.5 4.28A1 1 0 008 5.14z"/></svg>
+        </button>
+        <button class="chat-copy-btn w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 flex items-center justify-center transition active:scale-95" title="Salin" aria-label="Salin">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M5 15V6a2 2 0 012-2h9"/></svg>
+        </button>
+        <span class="ml-auto text-[10px] text-slate-400">${formatTimestamp(timestamp)}</span>
       </div>
     </div>
   `;
+
+  const translateBtn = aiDiv.querySelector('.chat-translate-btn');
+  const translationEl = aiDiv.querySelector('.chat-translation');
+  if (translateBtn && translationEl) {
+    translateBtn.addEventListener('click', () => {
+      const hidden = translationEl.classList.toggle('hidden');
+      translateBtn.textContent = `${getLanguage(sourceLang).flag} ${hidden ? 'Lihat' : 'Sembunyikan'} terjemahan`;
+    });
+  }
 
   // Listener untuk tombol Putar Suara & Copy pada gelembung AI ini
   const speakBtnEl = aiDiv.querySelector('.chat-speak-btn');
@@ -1493,26 +1487,26 @@ function closeSettingsModal() {
 
 // Handler Indikator Aktif Bottom Navigation Bar & Switching Tab Mode
 function setActiveTab(tabName) {
-  if (['home', 'voice', 'chat', 'dashboard'].includes(tabName)) {
+  if (['home', 'voice', 'chat', 'vocab', 'dashboard'].includes(tabName)) {
     activeTab = tabName;
     
     // Switch View Visibility
     if (homeView) homeView.classList.toggle('hidden', tabName !== 'home');
     if (voiceView) voiceView.classList.toggle('hidden', tabName !== 'voice');
     if (chatViewCard) chatViewCard.classList.toggle('hidden', tabName !== 'chat');
+    if (vocabView) vocabView.classList.toggle('hidden', tabName !== 'vocab');
     if (dashboardView) dashboardView.classList.toggle('hidden', tabName !== 'dashboard');
 
-    if (tabName === 'chat') {
-      scrollChatToBottom();
-    }
+    if (tabName === 'chat') scrollChatToBottom();
+    if (tabName === 'vocab') renderVocab();
   }
 
   const tabs = [
     { name: 'home', btn: navHomeBtn },
     { name: 'voice', btn: navVoiceBtn },
     { name: 'chat', btn: navChatBtn },
-    { name: 'dashboard', btn: navDashboardBtn },
-    { name: 'pengaturan', btn: navPengaturanBtn }
+    { name: 'vocab', btn: navVocabBtn },
+    { name: 'dashboard', btn: navDashboardBtn }
   ];
 
   tabs.forEach(tab => {
@@ -1528,6 +1522,132 @@ function setActiveTab(tabName) {
       if (iconContainer) iconContainer.className = `w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-slate-200 transition`;
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Kosakata harian
+// ---------------------------------------------------------------------------
+function langPair() {
+  return `${sourceLang}-${targetLang}`;
+}
+
+function renderVocab() {
+  const list = document.getElementById('vocabList');
+  const progressText = document.getElementById('vocabProgressText');
+  const progressBar = document.getElementById('vocabProgressBar');
+  const streakEl = document.getElementById('vocabStreak');
+  const generateBtn = document.getElementById('vocabGenerateBtn');
+  if (!list) return;
+
+  if (streakEl) streakEl.textContent = VocabManager.getStreak();
+
+  document.querySelectorAll('.vocab-count-btn').forEach((btn) => {
+    const active = Number(btn.dataset.vocabCount) === vocabCount;
+    btn.classList.toggle('bg-white', active);
+    btn.classList.toggle('text-blue-600', active);
+    btn.classList.toggle('shadow-sm', active);
+    btn.classList.toggle('text-slate-500', !active);
+  });
+
+  const words = VocabManager.getToday(langPair());
+  if (!words || words.length === 0) {
+    list.innerHTML = `
+      <div class="bg-white border border-dashed border-slate-300 rounded-[2rem] p-8 text-center space-y-2">
+        <div class="text-3xl">📚</div>
+        <p class="text-sm font-bold text-slate-800">Belum ada kata untuk hari ini</p>
+        <p class="text-[13px] text-slate-500">Ketuk tombol di atas, AI akan memilih ${vocabCount} kata ${getLanguage(targetLang).label} untuk dipelajari.</p>
+      </div>`;
+    if (progressText) progressText.textContent = 'Belum ada kata hari ini';
+    if (progressBar) progressBar.style.width = '0%';
+    if (generateBtn) generateBtn.textContent = `✨ Buat ${vocabCount} kata hari ini`;
+    return;
+  }
+
+  const learnedCount = words.filter((w) => VocabManager.isLearned(langPair(), w.word)).length;
+  if (progressText) progressText.textContent = `${learnedCount} dari ${words.length} kata dikuasai`;
+  if (progressBar) progressBar.style.width = `${Math.round((learnedCount / words.length) * 100)}%`;
+  if (generateBtn) generateBtn.textContent = '🔄 Ganti dengan kata lain';
+
+  list.innerHTML = words.map((word, index) => {
+    const learned = VocabManager.isLearned(langPair(), word.word);
+    return `
+    <div class="bg-white border ${learned ? 'border-emerald-200' : 'border-slate-200/80'} rounded-[2rem] p-4 shadow-sm space-y-3">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <p class="text-xl font-extrabold text-slate-900 leading-tight">${escapeHTML(word.word)}</p>
+            ${word.reading ? `<span class="text-[12px] text-slate-500">${escapeHTML(word.reading)}</span>` : ''}
+          </div>
+          ${word.type ? `<span class="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 rounded-md px-1.5 py-0.5">${escapeHTML(word.type)}</span>` : ''}
+        </div>
+        <button data-vocab-play="${index}" class="w-10 h-10 shrink-0 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition active:scale-95" title="Dengarkan" aria-label="Dengarkan">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5.14v13.72a1 1 0 001.5.86l11.14-6.86a1 1 0 000-1.72L9.5 4.28A1 1 0 008 5.14z"/></svg>
+        </button>
+      </div>
+
+      <p class="text-[14px] text-slate-700">${escapeHTML(word.meaning)}</p>
+
+      ${word.example ? `
+      <div class="rounded-2xl bg-slate-50 border border-slate-100 p-3 space-y-1">
+        <p class="text-[13px] font-semibold text-slate-800">${escapeHTML(word.example)}</p>
+        ${word.example_translation ? `<p class="text-[12px] text-slate-500">${escapeHTML(word.example_translation)}</p>` : ''}
+      </div>` : ''}
+
+      <button data-vocab-learned="${index}" class="w-full py-2.5 rounded-2xl text-[13px] font-bold transition active:scale-[0.98] min-h-[44px] ${learned ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-900 text-white'}">
+        ${learned ? '✓ Sudah hafal' : 'Tandai sudah hafal'}
+      </button>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-vocab-play]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const word = words[Number(btn.dataset.vocabPlay)];
+      playTTS(word.example || word.word);
+    });
+  });
+  list.querySelectorAll('[data-vocab-learned]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const word = words[Number(btn.dataset.vocabLearned)];
+      const nowLearned = VocabManager.toggleLearned(langPair(), word.word);
+      renderVocab();
+      renderHistoryList();
+      if (nowLearned) showToast(`✓ "${word.word}" ditandai hafal`);
+    });
+  });
+}
+
+async function generateDailyVocab() {
+  const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || '').trim();
+  const model = (modelSelect && modelSelect.value.trim()) || '';
+  if (!ensureApiConfig(apiKey, apiHost)) return;
+
+  const generateBtn = document.getElementById('vocabGenerateBtn');
+  if (generateBtn) {
+    generateBtn.disabled = true;
+    generateBtn.textContent = '⏳ AI sedang memilih kata...';
+  }
+
+  try {
+    const words = await generateVocabulary(apiKey, {
+      endpoint: apiHost,
+      model,
+      sourceLang,
+      targetLang,
+      count: vocabCount,
+      avoid: VocabManager.getLearned(langPair())
+    });
+    if (words.length === 0) throw new Error('AI tidak mengembalikan kata.');
+
+    VocabManager.saveToday(langPair(), words);
+    showToast(`📚 ${words.length} kata baru siap dipelajari`);
+  } catch (err) {
+    console.error('Gagal membuat kosakata:', err);
+    showToast(`Gagal membuat kosakata: ${err.message}`);
+  } finally {
+    if (generateBtn) generateBtn.disabled = false;
+    renderVocab();
+  }
 }
 
 // UI State Helpers
@@ -1677,7 +1797,7 @@ function attachEventListeners() {
   const chatSuggestChips = document.querySelectorAll('.chat-suggest-chip');
   chatSuggestChips.forEach(chip => {
     chip.addEventListener('click', () => {
-      const promptText = chip.textContent.trim().replace(/^"|"$/g, '');
+      const promptText = chip.dataset.prompt || chip.textContent.trim();
       if (chatInputText) chatInputText.value = promptText;
       handleSendChatMessage();
     });
@@ -1889,12 +2009,24 @@ function attachEventListeners() {
     });
   }
 
-  if (navPengaturanBtn) {
-    navPengaturanBtn.addEventListener('click', () => {
+  if (navVocabBtn) {
+    navVocabBtn.addEventListener('click', () => {
+      setActiveTab('vocab');
       closeHistoryDrawer();
-      openSettingsModal();
+      closeSettingsModal();
     });
   }
+
+  // Kosakata harian
+  const vocabGenerateBtn = document.getElementById('vocabGenerateBtn');
+  if (vocabGenerateBtn) vocabGenerateBtn.addEventListener('click', () => generateDailyVocab());
+  document.querySelectorAll('.vocab-count-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      vocabCount = Number(btn.dataset.vocabCount);
+      localStorage.setItem('verba_vocab_count', String(vocabCount));
+      renderVocab();
+    });
+  });
 
   // History Drawer Controls
   if (openHistoryBtn) openHistoryBtn.addEventListener('click', openHistoryDrawer);
