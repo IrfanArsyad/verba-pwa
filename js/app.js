@@ -781,7 +781,7 @@ function startRecordingUI(statusText) {
   if (currentMicSource === 'chat') {
     if (chatMicBtn) {
       chatMicBtn.classList.add('bg-red-600', 'text-white', 'recording-glow');
-      chatMicBtn.classList.remove('bg-slate-800', 'text-slate-300');
+      chatMicBtn.classList.remove('bg-white', 'text-slate-700');
     }
     if (chatInputText) chatInputText.placeholder = 'Mendengarkan ucapan Anda...';
   } else {
@@ -805,12 +805,12 @@ function stopRecordingUI() {
     waveVisualizer.classList.remove('flex');
   }
   if (wasRecording && micStatus && /^(Mendengarkan|Merekam)\.\.\./.test(micStatus.textContent)) {
-    micStatus.textContent = 'Klik tombol mikrofon di atas untuk mulai merekam ucapan Anda';
+    micStatus.textContent = 'Ketuk untuk bicara';
   }
 
   if (chatMicBtn) {
     chatMicBtn.classList.remove('bg-red-600', 'text-white', 'recording-glow');
-    chatMicBtn.classList.add('bg-slate-800', 'text-slate-300');
+    chatMicBtn.classList.add('bg-white', 'text-slate-700');
   }
   if (chatInputText && chatInputText.placeholder === 'Mendengarkan ucapan Anda...') {
     chatInputText.placeholder = 'Ketik atau ucapkan pesan...';
@@ -857,7 +857,7 @@ async function handleTranslate(inputOverride) {
 
     // 3. Auto Output Suara TTS (en-US)
     if (result.english_text && !result.english_text.includes('Gagal')) {
-      playTTS(result.english_text);
+      playTTS(result.english_text, { auto: true });
     }
 
   } catch (err) {
@@ -879,18 +879,28 @@ function renderUI(data) {
 }
 
 function formatExplanation(text) {
-  if (!text) return '<p class="text-slate-400 text-xs">Tidak ada penjelasan grammar.</p>';
+  if (!text) return '<p class="text-[14px] text-slate-500">Tidak ada penjelasan grammar.</p>';
 
-  const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
-  const formattedItems = lines.map(line => {
-    let cleanLine = line.replace(/^[•\-\*\d+\.]\s*/, '');
-    return `<li class="flex items-start gap-2 text-slate-200">
-      <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0 mt-1.5"></span>
-      <span class="leading-relaxed text-xs sm:text-sm">${escapeHTML(cleanLine)}</span>
-    </li>`;
-  }).join('');
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  const items = lines.map((line) => {
+    const clean = line.replace(/^(?:[•\-\*]|\d+[.)])\s*/, '');
+    // Tebalkan **teks** dan sorot `kata`/"kata" bahasa Inggris setelah di-escape
+    const html = escapeHTML(clean)
+      .replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>')
+      .replace(/`([^`]+)`/g, '<span class="font-semibold text-blue-700 bg-blue-50 rounded px-1">$1</span>')
+      .replace(/&quot;([^&]{1,60}?)&quot;/g, '<span class="font-semibold text-blue-700 bg-blue-50 rounded px-1">$1</span>');
+    return html;
+  });
 
-  return `<ul class="space-y-2.5 my-1">${formattedItems}</ul>`;
+  if (items.length === 1) {
+    return `<p class="text-[14px] leading-relaxed text-slate-700">${items[0]}</p>`;
+  }
+
+  return `<ol class="space-y-3">${items.map((html, i) => `
+    <li class="flex gap-3">
+      <span class="w-6 h-6 shrink-0 rounded-full bg-amber-100 text-amber-700 text-[12px] font-bold flex items-center justify-center">${i + 1}</span>
+      <span class="flex-1 text-[14px] leading-relaxed text-slate-700">${html}</span>
+    </li>`).join('')}</ol>`;
 }
 
 function escapeHTML(str) {
@@ -913,7 +923,8 @@ function formatTimestamp(timestamp) {
 }
 
 // 5. Pemutar Suara TTS (Browser vs Homelab Kokoro)
-async function playTTS(text) {
+// auto: pembacaan otomatis setelah jawaban; kegagalannya tidak perlu ditampilkan
+async function playTTS(text, { auto = false } = {}) {
   const targetText = text || (currentResult ? currentResult.english_text : '');
   if (!targetText) return;
 
@@ -923,12 +934,12 @@ async function playTTS(text) {
   try {
     const { host, key } = getSttServerConfig();
     const result = await synthesizeTTS(targetText, { ...getTTSConfig(), serverHost: host, serverKey: key });
-    if (result && result.fallbackError) {
+    if (result && result.fallbackError && !auto) {
       showToast(`Suara server gagal, pakai suara HP. (${result.fallbackError})`);
     }
   } catch (err) {
     console.error('TTS Playback Error:', err);
-    showToast(`🔇 ${err.message || 'Gagal memutar suara.'} Cek mode senyap & volume HP.`);
+    if (!auto) showToast(`🔇 ${err.message || 'Gagal memutar suara.'} Cek mode senyap & volume HP.`);
   } finally {
     buttons.forEach((btn) => { btn.disabled = false; btn.classList.remove('opacity-75'); });
   }
@@ -1161,7 +1172,7 @@ async function handleSendChatMessage() {
 
     // 8. Auto Output Suara TTS (en-US)
     if (result && result.reply) {
-      playTTS(result.reply);
+      playTTS(result.reply, { auto: true });
     }
 
   } catch (err) {
@@ -1504,15 +1515,22 @@ function attachEventListeners() {
     });
   }
 
-  // Sample Prompt Buttons Click Handler (Mode Voice)
-  const samplePromptBtns = document.querySelectorAll('.sample-prompt');
-  samplePromptBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const promptText = btn.textContent.trim().replace(/^"|"$/g, '');
-      if (textInput) textInput.value = promptText;
-      handleTranslate(promptText);
+  // Panel info "cara kerja" (Mode Voice)
+  const voiceInfoBtn = document.getElementById('voiceInfoBtn');
+  const voiceInfoPanel = document.getElementById('voiceInfoPanel');
+  if (voiceInfoBtn && voiceInfoPanel) {
+    voiceInfoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = voiceInfoPanel.classList.toggle('hidden') === false;
+      voiceInfoBtn.setAttribute('aria-expanded', String(open));
     });
-  });
+    document.addEventListener('click', (e) => {
+      if (!voiceInfoPanel.contains(e.target)) {
+        voiceInfoPanel.classList.add('hidden');
+        voiceInfoBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
 
   // Chat AI Practice Event Listeners (Mode Chat)
   if (chatSendBtn) chatSendBtn.addEventListener('click', () => handleSendChatMessage());
