@@ -113,6 +113,181 @@ export function resolveApiUrl(host, path) {
 }
 
 /**
+ * Prompt kosakata harian: N kata dalam bahasa tujuan + arti dalam bahasa sumber.
+ */
+export function buildVocabPrompt(sourceCode, targetCode, count, avoid = []) {
+  const source = getLanguage(sourceCode).english;
+  const target = getLanguage(targetCode).english;
+  const avoidLine = avoid.length
+    ? `\nDo NOT use these words (already learned): ${avoid.slice(0, 60).join(', ')}.`
+    : '';
+
+  return `You are a ${target} vocabulary coach for ${source} speakers.
+Pick exactly ${count} useful everyday ${target} words or short phrases for a learner, mixing difficulty from easy to intermediate.${avoidLine}
+
+CRITICAL INSTRUCTION:
+You MUST respond strictly with a RAW JSON object.
+Do NOT wrap your response in markdown syntax (such as \`\`\`json or \`\`\`).
+Do NOT add any text outside of the JSON string.
+
+The JSON schema MUST follow this exact structure:
+{
+  "words": [
+    {
+      "word": "<the ${target} word or phrase>",
+      "reading": "<pronunciation guide; romanization for non-Latin scripts, else empty string>",
+      "type": "<part of speech written in ${source}, e.g. kata benda>",
+      "meaning": "<short meaning written in ${source}>",
+      "example": "<one natural example sentence in ${target}>",
+      "example_translation": "<that sentence translated into ${source}>"
+    }
+  ]
+}`;
+}
+
+/**
+ * Minta daftar kosakata harian ke LLM.
+ * @returns {Promise<Array<{word,reading,type,meaning,example,example_translation}>>}
+ */
+export async function generateVocabulary(apiKey, options = {}) {
+  const endpoint = resolveChatEndpoint(options.endpoint);
+  const count = options.count || 5;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: options.model,
+      messages: [
+        { role: 'system', content: buildVocabPrompt(options.sourceLang, options.targetLang, count, options.avoid || []) },
+        { role: 'user', content: `Give me ${count} new words for today (${new Date().toDateString()}).` }
+      ],
+      temperature: 0.8
+    })
+  });
+
+  if (!response.ok) {
+    const errText = (await response.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    throw new Error(`HTTP ${response.status}: ${errText.slice(0, 140)}`);
+  }
+
+  const data = await response.json();
+  let raw = (data.choices?.[0]?.message?.content || '').trim();
+  raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+
+  const parsed = JSON.parse(raw);
+  const words = Array.isArray(parsed) ? parsed : (parsed.words || []);
+  return words
+    .filter((w) => w && w.word)
+    .slice(0, count)
+    .map((w) => ({
+      word: String(w.word),
+      reading: String(w.reading || ''),
+      type: String(w.type || ''),
+      meaning: String(w.meaning || ''),
+      example: String(w.example || ''),
+      example_translation: String(w.example_translation || '')
+    }));
+}
+
+// ============================================================================
+// KOSAKATA HARIAN: penyimpanan per hari + kata yang sudah dikuasai + streak
+// ============================================================================
+const VOCAB_DAILY_KEY = 'verba_vocab_daily';
+const VOCAB_LEARNED_KEY = 'verba_vocab_learned';
+const VOCAB_STREAK_KEY = 'verba_vocab_streak';
+
+function readJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function writeJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.error('Gagal menyimpan', key, err);
+  }
+}
+
+export function todayKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export const VocabManager = {
+  /** Kosakata hari ini untuk pasangan bahasa tertentu, atau null kalau belum ada */
+  getToday(pair) {
+    const all = readJSON(VOCAB_DAILY_KEY, {});
+    const entry = all[`${todayKey()}|${pair}`];
+    return entry && Array.isArray(entry.words) ? entry.words : null;
+  },
+
+  saveToday(pair, words) {
+    const all = readJSON(VOCAB_DAILY_KEY, {});
+    all[`${todayKey()}|${pair}`] = { date: todayKey(), pair, words };
+
+    // Simpan maksimal 14 hari terakhir saja
+    const keys = Object.keys(all).sort();
+    while (keys.length > 14) delete all[keys.shift()];
+    writeJSON(VOCAB_DAILY_KEY, all);
+  },
+
+  /** Daftar kata yang sudah ditandai dikuasai untuk pasangan bahasa ini */
+  getLearned(pair) {
+    return readJSON(VOCAB_LEARNED_KEY, {})[pair] || [];
+  },
+
+  isLearned(pair, word) {
+    return this.getLearned(pair).includes(word);
+  },
+
+  toggleLearned(pair, word) {
+    const all = readJSON(VOCAB_LEARNED_KEY, {});
+    const list = all[pair] || [];
+    const index = list.indexOf(word);
+    if (index >= 0) {
+      list.splice(index, 1);
+    } else {
+      list.push(word);
+      this.markStreakToday();
+    }
+    all[pair] = list;
+    writeJSON(VOCAB_LEARNED_KEY, all);
+    return index < 0;
+  },
+
+  countLearned() {
+    const all = readJSON(VOCAB_LEARNED_KEY, {});
+    return Object.values(all).reduce((total, list) => total + list.length, 0);
+  },
+
+  /** Catat aktivitas belajar hari ini dan hitung streak harian berturut-turut */
+  markStreakToday() {
+    const streak = readJSON(VOCAB_STREAK_KEY, { last: '', count: 0 });
+    const today = todayKey();
+    if (streak.last === today) return streak.count;
+
+    const yesterday = todayKey(new Date(Date.now() - 86400000));
+    streak.count = streak.last === yesterday ? streak.count + 1 : 1;
+    streak.last = today;
+    writeJSON(VOCAB_STREAK_KEY, streak);
+    return streak.count;
+  },
+
+  getStreak() {
+    const streak = readJSON(VOCAB_STREAK_KEY, { last: '', count: 0 });
+    if (!streak.last) return 0;
+    const today = todayKey();
+    const yesterday = todayKey(new Date(Date.now() - 86400000));
+    return streak.last === today || streak.last === yesterday ? streak.count : 0;
+  }
+};
+
+/**
  * Ambil daftar model dari endpoint /v1/models (format OpenAI).
  * @returns {Promise<string[]>} ID model, terurut
  */
