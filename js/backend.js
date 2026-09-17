@@ -58,12 +58,19 @@ export const DEFAULT_API_HOST = 'https://api.9router.com';
  * atau URL endpoint lengkap ("https://x/v1/chat/completions").
  */
 export function resolveChatEndpoint(host) {
+  return resolveApiUrl(host, '/chat/completions');
+}
+
+/**
+ * Gabungkan isian host dengan path API (mis. "/audio/transcriptions").
+ * Jika host sudah berupa URL endpoint lengkap, bagian endpoint-nya dibuang dulu.
+ */
+export function resolveApiUrl(host, path) {
   let url = (host || '').trim() || DEFAULT_API_HOST;
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-  url = url.replace(/\/+$/, '');
-  if (/\/chat\/completions$/i.test(url)) return url;
-  if (/\/v\d+$/i.test(url)) return url + '/chat/completions';
-  return url + '/v1/chat/completions';
+  url = url.replace(/\/+$/, '').replace(/\/(chat\/completions|audio\/[a-z]+)$/i, '');
+  if (!/\/v\d+$/i.test(url)) url += '/v1';
+  return url + path;
 }
 
 /**
@@ -436,6 +443,49 @@ export const ChatHistoryManager = {
     }
   }
 };
+
+// ============================================================================
+// 3b. SPEECH-TO-TEXT VIA SERVER (Whisper kompatibel OpenAI)
+// ============================================================================
+
+export const DEFAULT_STT_MODEL = 'whisper-1';
+
+/**
+ * Kirim rekaman audio ke endpoint /v1/audio/transcriptions pada host API.
+ * Dipakai ketika Web Speech API diblokir (iOS di luar Safari / PWA terpasang).
+ * @param {Blob} audioBlob - Hasil MediaRecorder
+ * @param {string} apiKey - API Key host
+ * @param {object} options - host, model, language
+ * @returns {Promise<string>} Teks hasil transkripsi
+ */
+export async function transcribeAudio(audioBlob, apiKey, options = {}) {
+  const endpoint = resolveApiUrl(options.host, '/audio/transcriptions');
+  const type = audioBlob.type || '';
+  const ext = type.includes('mp4') || type.includes('aac') ? 'm4a'
+    : type.includes('ogg') ? 'ogg'
+    : type.includes('wav') ? 'wav'
+    : 'webm';
+
+  const form = new FormData();
+  form.append('file', audioBlob, `rekaman.${ext}`);
+  form.append('model', options.model || DEFAULT_STT_MODEL);
+  if (options.language) form.append('language', options.language);
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+    body: form
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    const plain = errText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    throw new Error(`HTTP ${response.status}: ${plain.slice(0, 120)}`);
+  }
+
+  const data = await response.json();
+  return (data.text || '').trim();
+}
 
 // ============================================================================
 // 4. MODULAR TTS PROVIDER (Browser & Kokoro Homelab)

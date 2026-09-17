@@ -1,5 +1,5 @@
 // Naikkan versi ini setiap rilis agar cache lama dibersihkan.
-const CACHE_NAME = 'verba-ai-pwa-v2';
+const CACHE_NAME = 'verba-ai-pwa-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
