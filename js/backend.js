@@ -8,32 +8,43 @@
  */
 
 // ============================================================================
-// 1. SYSTEM PROMPT BAKU FOR AI ENGLISH TUTOR
+// 1. BAHASA & SYSTEM PROMPT DINAMIS
 // ============================================================================
-export const SYSTEM_PROMPT = `You are a friendly and expert AI English Tutor for Indonesian speakers.
-Your job is to translate and correct the user's Indonesian input into natural, grammatically accurate English, and provide a clear, point-by-point grammar explanation in Indonesian.
-
-CRITICAL INSTRUCTION:
-You MUST respond strictly with a RAW JSON object.
-Do NOT wrap your response in markdown syntax (such as \`\`\`json or \`\`\`).
-Do NOT add any text outside of the JSON string.
-
-The JSON schema MUST follow this exact structure:
-{
-  "indonesian_input": "<user's original Indonesian input text>",
-  "english_text": "<corrected and natural English translation>",
-  "explanation": "<point-by-point grammar explanation in Indonesian. Use bullet points or line breaks for readability.>"
-}`;
 
 /**
- * System Prompt baku khusus untuk Mode Chat Practice (Multi-turn Conversation)
+ * Daftar bahasa yang didukung.
+ * speech: kode untuk Web Speech (STT & TTS), stt: kode ISO-639-1 untuk Whisper.
  */
-export const CHAT_SYSTEM_PROMPT = `You are a friendly, encouraging, and expert AI English Tutor for Indonesian learners engaged in an interactive practice chat.
+export const LANGUAGES = [
+  { code: 'id', label: 'Indonesia', english: 'Indonesian', flag: '🇮🇩', speech: 'id-ID', stt: 'id', sample: 'Halo! Saya tutor bahasa Anda. Mari kita berlatih bersama.' },
+  { code: 'en', label: 'Inggris', english: 'English', flag: '🇬🇧', speech: 'en-US', stt: 'en', sample: 'Hello! I am your VerbaAI tutor. Let us practice together.' },
+  { code: 'ja', label: 'Jepang', english: 'Japanese', flag: '🇯🇵', speech: 'ja-JP', stt: 'ja', sample: 'こんにちは！あなたの語学チューターです。一緒に練習しましょう。' },
+  { code: 'ko', label: 'Korea', english: 'Korean', flag: '🇰🇷', speech: 'ko-KR', stt: 'ko', sample: '안녕하세요! 저는 당신의 언어 튜터입니다. 함께 연습해요.' },
+  { code: 'zh', label: 'Mandarin', english: 'Mandarin Chinese', flag: '🇨🇳', speech: 'zh-CN', stt: 'zh', sample: '你好！我是你的语言导师，我们一起练习吧。' },
+  { code: 'ar', label: 'Arab', english: 'Arabic', flag: '🇸🇦', speech: 'ar-SA', stt: 'ar', sample: 'مرحبا! أنا معلم اللغة الخاص بك. لنتدرب معا.' },
+  { code: 'es', label: 'Spanyol', english: 'Spanish', flag: '🇪🇸', speech: 'es-ES', stt: 'es', sample: '¡Hola! Soy tu tutor de idiomas. Practiquemos juntos.' },
+  { code: 'de', label: 'Jerman', english: 'German', flag: '🇩🇪', speech: 'de-DE', stt: 'de', sample: 'Hallo! Ich bin dein Sprachtutor. Lass uns zusammen üben.' },
+  { code: 'fr', label: 'Prancis', english: 'French', flag: '🇫🇷', speech: 'fr-FR', stt: 'fr', sample: 'Bonjour ! Je suis votre tuteur de langue. Pratiquons ensemble.' },
+  { code: 'ms', label: 'Melayu', english: 'Malay', flag: '🇲🇾', speech: 'ms-MY', stt: 'ms', sample: 'Helo! Saya tutor bahasa anda. Mari kita berlatih bersama.' }
+];
 
-YOUR RESPONSIBILITIES:
-1. Respond to the user naturally and conversationally in English.
-2. Provide a short, constructive grammar correction in Indonesian if the user made any grammatical/spelling errors in their previous message.
-3. Provide an Indonesian translation of your English reply at the bottom.
+export const DEFAULT_SOURCE_LANG = 'id';
+export const DEFAULT_TARGET_LANG = 'en';
+
+export function getLanguage(code) {
+  return LANGUAGES.find((lang) => lang.code === code) || LANGUAGES[0];
+}
+
+/**
+ * Prompt tutor: terjemahkan + koreksi dari bahasa sumber ke bahasa tujuan,
+ * penjelasan tata bahasa ditulis dalam bahasa sumber (bahasa yang dikuasai pengguna).
+ */
+export function buildTutorPrompt(sourceCode, targetCode) {
+  const source = getLanguage(sourceCode).english;
+  const target = getLanguage(targetCode).english;
+
+  return `You are a friendly and expert AI ${target} tutor for ${source} speakers.
+Your job is to translate and correct the user's ${source} input into natural, grammatically accurate ${target}, and provide a clear, point-by-point grammar explanation written in ${source}.
 
 CRITICAL INSTRUCTION:
 You MUST respond strictly with a RAW JSON object.
@@ -42,10 +53,38 @@ Do NOT add any text outside of the JSON string.
 
 The JSON schema MUST follow this exact structure:
 {
-  "reply": "<Your conversational response in natural English>",
-  "correction": "<Short grammar correction in Indonesian for user's last input, or leave empty string '' if no errors>",
-  "translation": "<Indonesian translation of your English reply>"
+  "source_text": "<user's original ${source} input text>",
+  "target_text": "<corrected and natural ${target} translation>",
+  "explanation": "<point-by-point grammar explanation written in ${source}. One point per line.>"
 }`;
+}
+
+/**
+ * Prompt Mode Chat Practice (Multi-turn Conversation)
+ */
+export function buildChatPrompt(sourceCode, targetCode) {
+  const source = getLanguage(sourceCode).english;
+  const target = getLanguage(targetCode).english;
+
+  return `You are a friendly, encouraging, and expert AI ${target} tutor for ${source} speakers engaged in an interactive practice chat.
+
+YOUR RESPONSIBILITIES:
+1. Respond to the user naturally and conversationally in ${target}.
+2. Provide a short, constructive grammar correction written in ${source} if the user made any grammatical/spelling errors in their previous message.
+3. Provide a ${source} translation of your ${target} reply at the bottom.
+
+CRITICAL INSTRUCTION:
+You MUST respond strictly with a RAW JSON object.
+Do NOT wrap your response in markdown syntax (such as \`\`\`json or \`\`\`).
+Do NOT add any text outside of the JSON string.
+
+The JSON schema MUST follow this exact structure:
+{
+  "reply": "<Your conversational response in natural ${target}>",
+  "correction": "<Short grammar correction in ${source} for user's last input, or leave empty string '' if no errors>",
+  "translation": "<${source} translation of your ${target} reply>"
+}`;
+}
 
 // ============================================================================
 // 2. 9ROUTER API REQUEST HANDLER & JSON PARSER
@@ -135,7 +174,7 @@ export async function processIndonesianToEnglish(indonesianInput, apiKey, option
       body: JSON.stringify({
         model: model,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: buildTutorPrompt(options.sourceLang, options.targetLang) },
           { role: 'user', content: indonesianInput }
         ],
         temperature: 0.3
@@ -194,7 +233,7 @@ export async function processChatConversation(messages = [], apiKey, options = {
 
   // Sisipkan System Prompt Chat di paling awal riwayat pesan
   const fullConversation = [
-    { role: 'system', content: CHAT_SYSTEM_PROMPT },
+    { role: 'system', content: buildChatPrompt(options.sourceLang, options.targetLang) },
     ...validMessages
   ];
 
@@ -304,15 +343,17 @@ function parseAndValidateJSON(rawContent, fallbackInput) {
 
     const parsed = JSON.parse(cleanText);
 
-    // Validasi keberadaan kunci yang wajib ada pada JSON schema
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'indonesian_input' in parsed &&
-      'english_text' in parsed &&
-      'explanation' in parsed
-    ) {
-      return parsed;
+    // Terima skema baru (source_text/target_text) maupun skema lama
+    if (typeof parsed === 'object' && parsed !== null && 'explanation' in parsed) {
+      const sourceText = parsed.source_text ?? parsed.indonesian_input;
+      const targetText = parsed.target_text ?? parsed.english_text;
+      if (typeof sourceText === 'string' && typeof targetText === 'string') {
+        return {
+          indonesian_input: sourceText || fallbackInput,
+          english_text: targetText,
+          explanation: parsed.explanation
+        };
+      }
     }
 
     throw new Error('Skema JSON tidak lengkap.');
@@ -656,11 +697,13 @@ function speakWithBrowser(text, config) {
     utterance.lang = config.lang || 'en-US';
     utterance.rate = config.rate || 0.9;
 
-    const voices = synth.getVoices();
-    const enVoice = voices.find((v) => v.lang === 'en-US' && v.localService)
-      || voices.find((v) => v.lang.replace('_', '-').startsWith('en-US'))
-      || voices.find((v) => v.lang.startsWith('en'));
-    if (enVoice) utterance.voice = enVoice;
+    const wanted = (config.lang || 'en-US').replace('_', '-');
+    const base = wanted.split('-')[0];
+    const voices = synth.getVoices().map((v) => ({ v, lang: (v.lang || '').replace('_', '-') }));
+    const match = voices.find((x) => x.lang === wanted && x.v.localService)
+      || voices.find((x) => x.lang === wanted)
+      || voices.find((x) => x.lang.startsWith(base));
+    if (match) utterance.voice = match.v;
 
     // Batas waktu supaya tombol tidak terkunci kalau browser diam saja
     const timeout = setTimeout(() => resolve({ success: true, provider: TTSProvider.BROWSER }), Math.max(4000, text.length * 120));

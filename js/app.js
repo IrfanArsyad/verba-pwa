@@ -11,7 +11,11 @@ import {
   transcribeAudio,
   resolveChatEndpoint,
   listModels,
-  unlockAudioPlayback
+  unlockAudioPlayback,
+  LANGUAGES,
+  getLanguage,
+  DEFAULT_SOURCE_LANG,
+  DEFAULT_TARGET_LANG
 } from './backend.js?v=__BUILD__';
 
 // DOM Elements - View Containers
@@ -111,6 +115,8 @@ const historyBadge = document.getElementById('historyBadge');
 let isRecording = false;
 let currentMicSource = 'voice'; // 'voice' | 'chat'
 let mediaRecorder = null; // Perekam untuk mode STT server (Whisper)
+let sourceLang = DEFAULT_SOURCE_LANG;
+let targetLang = DEFAULT_TARGET_LANG;
 let browserSttBlocked = false; // true setelah Web Speech ditolak (service-not-allowed)
 let recognition = null;
 let currentResult = null;
@@ -122,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // iOS: buka izin audio pada ketukan pertama agar jawaban bisa dibacakan otomatis
   ['touchend', 'click'].forEach((type) => document.addEventListener(type, unlockAudioPlayback, { capture: true, passive: true }));
   initSegmentedControls();
+  initLanguagePicker();
   loadSettings();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   initSpeechRecognition();
@@ -169,6 +176,122 @@ function loadSettings() {
 
   refreshSegmentedControls();
   updateVoiceFields();
+}
+
+// ---------------------------------------------------------------------------
+// Pilihan bahasa (sumber → tujuan)
+// ---------------------------------------------------------------------------
+function loadLanguages() {
+  const savedSource = localStorage.getItem('verba_source_lang');
+  const savedTarget = localStorage.getItem('verba_target_lang');
+  if (savedSource && getLanguage(savedSource).code === savedSource) sourceLang = savedSource;
+  if (savedTarget && getLanguage(savedTarget).code === savedTarget) targetLang = savedTarget;
+  if (sourceLang === targetLang) targetLang = sourceLang === 'en' ? 'id' : 'en';
+}
+
+function setLanguages(nextSource, nextTarget) {
+  // Sumber & tujuan tidak boleh sama; yang lama otomatis bertukar
+  if (nextSource === nextTarget) {
+    if (nextSource !== sourceLang) nextTarget = sourceLang;
+    else nextSource = targetLang;
+  }
+  sourceLang = nextSource;
+  targetLang = nextTarget;
+  localStorage.setItem('verba_source_lang', sourceLang);
+  localStorage.setItem('verba_target_lang', targetLang);
+  applyLanguages();
+}
+
+function langChipHTML(lang, active) {
+  return `<button type="button" data-lang="${lang.code}" class="flex items-center gap-2 rounded-2xl border px-3 py-2.5 min-h-[48px] text-[14px] font-semibold transition active:scale-[0.98] ${active ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/25' : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300'}">
+    <span class="text-lg leading-none">${lang.flag}</span>${lang.label}
+  </button>`;
+}
+
+function renderLanguageLists() {
+  const sourceList = document.getElementById('sourceLangList');
+  const targetList = document.getElementById('targetLangList');
+  if (sourceList) sourceList.innerHTML = LANGUAGES.map((lang) => langChipHTML(lang, lang.code === sourceLang)).join('');
+  if (targetList) targetList.innerHTML = LANGUAGES.map((lang) => langChipHTML(lang, lang.code === targetLang)).join('');
+}
+
+// Terapkan bahasa ke seluruh UI (label, placeholder, dan bahasa suara)
+function applyLanguages() {
+  const source = getLanguage(sourceLang);
+  const target = getLanguage(targetLang);
+
+  document.querySelectorAll('.lang-pill-text').forEach((el) => {
+    el.textContent = `${source.flag} ${source.label} → ${target.flag} ${target.label}`;
+  });
+  const sourceBadge = document.getElementById('sourceBadge');
+  const targetBadge = document.getElementById('targetBadge');
+  if (sourceBadge) sourceBadge.textContent = source.code.toUpperCase();
+  if (targetBadge) targetBadge.textContent = target.code.toUpperCase();
+
+  document.querySelectorAll('.lang-info-source').forEach((el) => {
+    el.textContent = `Ucapkan atau ketik kalimat Bahasa ${source.label}.`;
+  });
+  document.querySelectorAll('.lang-info-target').forEach((el) => {
+    el.textContent = `AI mengubahnya jadi Bahasa ${target.label} yang benar.`;
+  });
+
+  if (textInput) textInput.placeholder = `Atau ketik kalimat Bahasa ${source.label}...`;
+  if (chatInputText) chatInputText.placeholder = `Ketik atau ucapkan pesan Bahasa ${target.label}...`;
+  const dashAccent = document.getElementById('dashTtsAccent');
+  if (dashAccent) dashAccent.textContent = `${target.speech} Native`;
+  if (recognition) recognition.lang = source.speech;
+  renderLanguageLists();
+}
+
+function openLangModal() {
+  const modal = document.getElementById('langModal');
+  const content = document.getElementById('langModalContent');
+  if (!modal || !content) return;
+  renderLanguageLists();
+  modal.classList.remove('opacity-0', 'pointer-events-none');
+  content.classList.remove('translate-y-6');
+}
+
+function closeLangModal() {
+  const modal = document.getElementById('langModal');
+  const content = document.getElementById('langModalContent');
+  if (!modal || !content) return;
+  content.classList.add('translate-y-6');
+  modal.classList.add('opacity-0', 'pointer-events-none');
+}
+
+function initLanguagePicker() {
+  loadLanguages();
+  applyLanguages();
+
+  document.querySelectorAll('.lang-pill').forEach((btn) => btn.addEventListener('click', openLangModal));
+
+  const modal = document.getElementById('langModal');
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeLangModal();
+    });
+  }
+  const closeBtn = document.getElementById('closeLangBtn');
+  if (closeBtn) closeBtn.addEventListener('click', closeLangModal);
+
+  const swapBtn = document.getElementById('swapLangBtn');
+  if (swapBtn) swapBtn.addEventListener('click', () => setLanguages(targetLang, sourceLang));
+
+  const sourceList = document.getElementById('sourceLangList');
+  const targetList = document.getElementById('targetLangList');
+  if (sourceList) {
+    sourceList.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-lang]');
+      if (btn) setLanguages(btn.dataset.lang, targetLang);
+    });
+  }
+  if (targetList) {
+    targetList.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-lang]');
+      if (btn) setLanguages(sourceLang, btn.dataset.lang);
+    });
+  }
 }
 
 // Simpan semua isian pengaturan ke localStorage (tanpa validasi)
@@ -438,7 +561,7 @@ function initSpeechRecognition() {
   if (!SpeechRecognition) return;
 
   recognition = new SpeechRecognition();
-  recognition.lang = 'id-ID'; // Bahasa Indonesia
+  recognition.lang = getLanguage(sourceLang).speech;
   // Safari iOS sering tidak pernah mengirim hasil final; pakai hasil sementara
   // dan hentikan sendiri setelah pengguna diam sebentar.
   recognition.continuous = true;
@@ -635,6 +758,7 @@ function toggleRecording(source = 'voice') {
   }
 
   currentMicSource = source;
+  if (recognition) recognition.lang = getLanguage(sourceLang).speech;
 
   const mode = getSttMode();
   if (mode === 'keyboard') {
@@ -758,7 +882,7 @@ async function startServerRecording() {
       showToast('⏳ Mengubah suara jadi teks...');
     }
     try {
-      const text = await transcribeAudio(blob, sttKey, { host: sttHost, model: sttModel, language: 'id' });
+      const text = await transcribeAudio(blob, sttKey, { host: sttHost, model: sttModel, language: getLanguage(sourceLang).stt });
       handleTranscript(text);
     } catch (err) {
       console.error('Transcription error:', err);
@@ -825,7 +949,7 @@ async function handleTranslate(inputOverride) {
   const selectedModel = (modelSelect && modelSelect.value.trim()) || '';
 
   if (!text) {
-    showToast('Masukkan kalimat Bahasa Indonesia terlebih dahulu.');
+    showToast(`Masukkan kalimat Bahasa ${getLanguage(sourceLang).label} terlebih dahulu.`);
     return;
   }
 
@@ -843,6 +967,8 @@ async function handleTranslate(inputOverride) {
     // Panggil Layanan Backend AI (9router API)
     const result = await processIndonesianToEnglish(text, apiKey, {
       model: selectedModel,
+      sourceLang,
+      targetLang,
       endpoint: apiHost
     });
 
@@ -933,7 +1059,7 @@ async function playTTS(text, { auto = false } = {}) {
 
   try {
     const { host, key } = getSttServerConfig();
-    const result = await synthesizeTTS(targetText, { ...getTTSConfig(), serverHost: host, serverKey: key });
+    const result = await synthesizeTTS(targetText, { ...getTTSConfig(), lang: getLanguage(targetLang).speech, serverHost: host, serverKey: key });
     if (result && result.fallbackError && !auto) {
       showToast(`Suara server gagal, pakai suara HP. (${result.fallbackError})`);
     }
@@ -952,7 +1078,7 @@ async function copyToClipboard(text) {
 
   try {
     await navigator.clipboard.writeText(targetText);
-    showToast('📋 Teks Bahasa Inggris berhasil disalin!');
+    showToast('📋 Teks berhasil disalin!');
   } catch (err) {
     const tempInput = document.createElement('textarea');
     tempInput.value = targetText;
@@ -960,7 +1086,7 @@ async function copyToClipboard(text) {
     tempInput.select();
     document.execCommand('copy');
     document.body.removeChild(tempInput);
-    showToast('📋 Teks Bahasa Inggris berhasil disalin!');
+    showToast('📋 Teks berhasil disalin!');
   }
 }
 
@@ -1011,10 +1137,10 @@ function renderListContainer(containerEl, history, isDrawer = false) {
   containerEl.innerHTML = history.map(item => `
     <div class="history-item bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2 hover:border-blue-400 hover:bg-white transition cursor-pointer group shadow-sm" data-id="${item.id}">
       <div class="flex items-center justify-between text-[11px] text-slate-500">
-        <span class="truncate max-w-[200px] font-semibold text-slate-700">🇮🇩 ${escapeHTML(item.indonesian_input)}</span>
+        <span class="truncate max-w-[200px] font-semibold text-slate-700">${escapeHTML(item.indonesian_input)}</span>
         <span class="text-slate-400 text-[10px]">${formatTimestamp(item.timestamp)}</span>
       </div>
-      <p class="text-xs font-bold text-blue-600 group-hover:text-blue-700 transition leading-snug">🇬🇧 ${escapeHTML(item.english_text)}</p>
+      <p class="text-xs font-bold text-blue-600 group-hover:text-blue-700 transition leading-snug">${escapeHTML(item.english_text)}</p>
       
       <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-200">
         <button class="play-hist-btn h-7 px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold flex items-center gap-1 transition active:scale-95" title="Putar Suara">
@@ -1144,6 +1270,8 @@ async function handleSendChatMessage() {
     const selectedModel = (modelSelect && modelSelect.value.trim()) || '';
     const result = await processChatConversation(chatMessages, apiKey, { 
       model: selectedModel,
+      sourceLang,
+      targetLang,
       endpoint: apiHost
     });
 
@@ -1241,7 +1369,7 @@ function appendAIMessageUI(data, timestamp = Date.now()) {
         <!-- Translation Box -->
         ${translationText ? `
         <div class="bg-white p-2.5 rounded-xl border border-slate-200 text-[11px] text-slate-600 italic">
-          🇮🇩 ${escapeHTML(translationText)}
+          ${getLanguage(sourceLang).flag} ${escapeHTML(translationText)}
         </div>` : ''}
 
         <!-- Actions: Quick TTS Speaker & Copy -->
@@ -1566,7 +1694,7 @@ function attachEventListeners() {
 
   // Tes suara: dipicu ketukan, jadi aman untuk kebijakan audio iOS
   if (testVoiceBtn) {
-    testVoiceBtn.addEventListener('click', () => playTTS('Hello! I am your VerbaAI English tutor. Let us practice together.'));
+    testVoiceBtn.addEventListener('click', () => playTTS(getLanguage(targetLang).sample));
   }
 
   // Setiap isian pengaturan langsung disimpan saat diketik/diubah, jadi tidak
