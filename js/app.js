@@ -9,8 +9,9 @@ import {
   TTSProvider,
   DEFAULT_API_HOST,
   DEFAULT_STT_MODEL,
-  transcribeAudio
-} from './backend.js';
+  transcribeAudio,
+  resolveChatEndpoint
+} from './backend.js?v=__BUILD__';
 
 // DOM Elements - View Containers
 const homeView = document.getElementById('homeView');
@@ -1181,6 +1182,54 @@ function attachEventListeners() {
 
       showToast('⚙️ Pengaturan API & TTS tersimpan!');
       closeSettingsModal();
+    });
+  }
+
+  // Tes Koneksi API: tampilkan error apa adanya supaya mudah didiagnosa
+  const testConnectionBtn = document.getElementById('testConnectionBtn');
+  const testConnectionResult = document.getElementById('testConnectionResult');
+  if (testConnectionBtn && testConnectionResult) {
+    testConnectionBtn.addEventListener('click', async () => {
+      const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+      const endpoint = resolveChatEndpoint(apiHostInput ? apiHostInput.value : '');
+      const model = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
+
+      const report = (ok, message) => {
+        testConnectionResult.textContent = message;
+        testConnectionResult.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-emerald-50', 'text-emerald-700', 'bg-slate-50', 'text-slate-600');
+        testConnectionResult.classList.add(...(ok === null ? ['bg-slate-50', 'text-slate-600'] : ok ? ['bg-emerald-50', 'text-emerald-700'] : ['bg-red-50', 'text-red-700']));
+      };
+
+      if (!apiKey) {
+        report(false, 'API Key masih kosong.');
+        return;
+      }
+      if (location.protocol === 'https:' && endpoint.startsWith('http:')) {
+        report(false, `Host ${endpoint} memakai http://, browser memblokirnya karena aplikasi dibuka lewat https. Pakai host https://.`);
+        return;
+      }
+
+      report(null, `Menghubungi ${endpoint} ...`);
+      testConnectionBtn.disabled = true;
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Reply with: OK' }], max_tokens: 5 })
+        });
+        const body = await response.text();
+        if (!response.ok) {
+          report(false, `❌ ${endpoint} → HTTP ${response.status}: ${body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)}`);
+          return;
+        }
+        let reply = '';
+        try { reply = JSON.parse(body).choices?.[0]?.message?.content || ''; } catch (_) { /* bukan JSON */ }
+        report(true, `✅ Terhubung ke ${endpoint} (model ${model}). Balasan: ${reply || body.slice(0, 80)}`);
+      } catch (err) {
+        report(false, `❌ Tidak bisa menghubungi ${endpoint}. Penyebab umum: domain salah/tidak bisa diakses dari HP, atau server API tidak mengizinkan CORS dari ${location.origin}. Detail: ${err.message}`);
+      } finally {
+        testConnectionBtn.disabled = false;
+      }
     });
   }
 
