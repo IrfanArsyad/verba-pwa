@@ -1,0 +1,8 @@
+.git
+.gitignore
+.dockerignore
+deploy/cloudflared
+docker-compose.yml
+Dockerfile
+Readme.md
+*.log

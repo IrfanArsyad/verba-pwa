@@ -1,0 +1,31 @@
+# VerbaAI PWA — verba.studiolab.id
+#
+# Satu stack, satu tunnel (studiolab-verba). Tidak ada port publik: pintu
+# masuk satu-satunya adalah cloudflared di jaringan compose yang sama.
+
+services:
+  web:
+    build: .
+    image: verba-pwa:latest
+    container_name: verba_web
+    restart: always
+    # Hanya untuk diagnosa lokal.
+    ports:
+      - "127.0.0.1:8130:80"
+    networks: [internal]
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.8.3
+    container_name: verba_tunnel
+    restart: always
+    command: ["tunnel", "--config", "/etc/cloudflared/config.yml", "--no-autoupdate", "run"]
+    # credentials.json bermode 600 milik uid 1000; samakan uid-nya.
+    user: "1000:1000"
+    volumes:
+      - ./deploy/cloudflared:/etc/cloudflared:ro
+    depends_on:
+      - web
+    networks: [internal]
+
+networks:
+  internal:

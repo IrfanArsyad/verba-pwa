@@ -1,0 +1,9 @@
+# Tunnel khusus stack ini (studiolab-verba).
+tunnel: 8484e8b1-1b4e-4253-99bf-8d28cef198ab
+credentials-file: /etc/cloudflared/credentials.json
+no-autoupdate: true
+
+ingress:
+  - hostname: verba.studiolab.id
+    service: http://web:80
+  - service: http_status:404
