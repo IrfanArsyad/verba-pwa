@@ -14,6 +14,16 @@ services:
       - "127.0.0.1:8130:80"
     networks: [internal]
 
+  # Kokoro TTS (OpenAI-compatible /v1/audio/speech), CPU-only.
+  kokoro:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    container_name: verba_kokoro
+    restart: always
+    # Hanya untuk diagnosa lokal; akses publik lewat nginx /kokoro/.
+    ports:
+      - "127.0.0.1:8880:8880"
+    networks: [internal]
+
   cloudflared:
     image: cloudflare/cloudflared:2026.8.3
     container_name: verba_tunnel
@@ -25,6 +35,7 @@ services:
       - ./deploy/cloudflared:/etc/cloudflared:ro
     depends_on:
       - web
+      - kokoro
     networks: [internal]
 
 networks:

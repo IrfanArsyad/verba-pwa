@@ -174,8 +174,10 @@ function loadSettings() {
   const ttsConfig = getTTSConfig();
   if (ttsProviderSelect) ttsProviderSelect.value = ttsConfig.provider || TTSProvider.BROWSER;
   if (kokoroUrlInput) {
-    // Default lama localhost tidak bisa dijangkau dari HP
-    kokoroUrlInput.value = /localhost/.test(ttsConfig.kokoroUrl || '') ? '' : (ttsConfig.kokoroUrl || '');
+    // Default lama localhost tidak bisa dijangkau dari HP; Kokoro kini
+    // diproksikan di domain yang sama lewat /kokoro/.
+    const saved = /localhost/.test(ttsConfig.kokoroUrl || '') ? '' : (ttsConfig.kokoroUrl || '');
+    kokoroUrlInput.value = saved || `${location.origin}/kokoro/v1/audio/speech`;
   }
   if (ttsModelInput) ttsModelInput.value = ttsConfig.serverModel || '';
   if (ttsVoiceInput) ttsVoiceInput.value = ttsConfig.serverVoice || '';
