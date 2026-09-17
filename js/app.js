@@ -51,6 +51,8 @@ const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const settingsModal = document.getElementById('settingsModal');
 const settingsModalContent = document.getElementById('settingsModalContent');
 const apiKeyInput = document.getElementById('apiKeyInput');
+const toggleApiKeyVisibility = document.getElementById('toggleApiKeyVisibility');
+const apiHostInput = document.getElementById('apiHostInput');
 const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
 const modelSelect = document.getElementById('modelSelect');
 const ttsProviderSelect = document.getElementById('ttsProviderSelect');
@@ -110,7 +112,10 @@ document.addEventListener('DOMContentLoaded', () => {
 function loadSettings() {
   // Load 9router LLM Settings
   const savedKey = localStorage.getItem('9router_api_key') || '';
-  if (savedKey) apiKeyInput.value = savedKey;
+  if (savedKey && apiKeyInput) apiKeyInput.value = savedKey;
+
+  const savedHost = localStorage.getItem('9router_api_host') || 'https://api.9router.com/v1/chat/completions';
+  if (savedHost && apiHostInput) apiHostInput.value = savedHost;
 
   const savedModel = localStorage.getItem('9router_model') || 'deepseek/deepseek-chat';
   if (modelSelect) modelSelect.value = savedModel;
@@ -265,7 +270,9 @@ function stopRecordingUI() {
 // 2. Translaasi & Integrasi Backend API
 async function handleTranslate(inputOverride) {
   const text = (inputOverride || textInput.value).trim();
-  const apiKey = apiKeyInput.value.trim();
+  const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || 'https://api.9router.com/v1/chat/completions').trim();
+  const selectedModel = modelSelect ? modelSelect.value : 'deepseek/deepseek-chat';
 
   if (!text) {
     showToast('Masukkan kalimat Bahasa Indonesia terlebih dahulu.');
@@ -277,9 +284,10 @@ async function handleTranslate(inputOverride) {
     return;
   }
 
-  // Simpan Pengaturan API Key & Model
+  // Simpan Pengaturan API Key & Model & Host
   localStorage.setItem('9router_api_key', apiKey);
-  if (modelSelect) localStorage.setItem('9router_model', modelSelect.value);
+  localStorage.setItem('9router_api_host', apiHost || 'https://api.9router.com/v1/chat/completions');
+  if (modelSelect) localStorage.setItem('9router_model', selectedModel);
 
   // Tampilkan UI Loading State
   showLoading(true);
@@ -287,7 +295,8 @@ async function handleTranslate(inputOverride) {
   try {
     // Panggil Layanan Backend AI (9router API)
     const result = await processIndonesianToEnglish(text, apiKey, {
-      model: modelSelect ? modelSelect.value : 'deepseek/deepseek-chat'
+      model: selectedModel,
+      endpoint: apiHost || 'https://api.9router.com/v1/chat/completions'
     });
 
     currentResult = result;
@@ -546,6 +555,7 @@ function loadSavedChatHistory() {
 async function handleSendChatMessage() {
   const text = (chatInputText ? chatInputText.value : '').trim();
   const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || 'https://api.9router.com/v1/chat/completions').trim();
 
   if (!text) {
     showToast('Tulis atau ucapkan pesan terlebih dahulu.');
@@ -579,7 +589,10 @@ async function handleSendChatMessage() {
   try {
     // 4. Panggil Backend processChatConversation dari backend.js
     const selectedModel = modelSelect ? modelSelect.value : 'deepseek/deepseek-chat';
-    const result = await processChatConversation(chatMessages, apiKey, { model: selectedModel });
+    const result = await processChatConversation(chatMessages, apiKey, { 
+      model: selectedModel,
+      endpoint: apiHost || 'https://api.9router.com/v1/chat/completions'
+    });
 
     // 5. Sembunyikan Typing Indicator
     showChatTypingIndicator(false);
@@ -915,6 +928,14 @@ function attachEventListeners() {
     });
   });
 
+  // Toggle Visibility password untuk 9router API Key
+  if (toggleApiKeyVisibility && apiKeyInput) {
+    toggleApiKeyVisibility.addEventListener('click', () => {
+      const isPassword = apiKeyInput.type === 'password';
+      apiKeyInput.type = isPassword ? 'text' : 'password';
+    });
+  }
+
   // TTS Provider Dropdown Selector Change
   if (ttsProviderSelect) {
     ttsProviderSelect.addEventListener('change', () => {
@@ -922,10 +943,11 @@ function attachEventListeners() {
     });
   }
 
-  // Simpan Pengaturan (9router API Key + LLM Model + Provider TTS)
+  // Simpan Pengaturan (9router API Key + Host Endpoint + LLM Model + Provider TTS)
   if (saveApiKeyBtn) {
     saveApiKeyBtn.addEventListener('click', () => {
-      const apiKey = apiKeyInput.value.trim();
+      const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+      const apiHost = apiHostInput ? apiHostInput.value.trim() : '';
       const selectedModel = modelSelect ? modelSelect.value : 'deepseek/deepseek-chat';
       const selectedProvider = ttsProviderSelect ? ttsProviderSelect.value : TTSProvider.BROWSER;
       const kokoroUrl = kokoroUrlInput ? kokoroUrlInput.value.trim() : '';
@@ -935,8 +957,9 @@ function attachEventListeners() {
         return;
       }
 
-      // Save 9router Settings
+      // Save 9router Settings to localStorage
       localStorage.setItem('9router_api_key', apiKey);
+      localStorage.setItem('9router_api_host', apiHost || 'https://api.9router.com/v1/chat/completions');
       if (modelSelect) localStorage.setItem('9router_model', selectedModel);
 
       // Save TTS Config via backend.js helper
