@@ -645,14 +645,15 @@
           </div>
         </div>
         <div>
-          <label for="modelSelect" class="block text-xs font-bold text-slate-700 mb-1">Model LLM AI</label>
-          <input type="text" list="modelOptions" autocapitalize="off" autocorrect="off" spellcheck="false" id="modelSelect" placeholder="deepseek/deepseek-chat" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
-          <datalist id="modelOptions">
-            <option value="deepseek/deepseek-chat">DeepSeek Chat (Direkomendasikan)</option>
-            <option value="openai/gpt-4o">GPT-4o</option>
-            <option value="anthropic/claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-          </datalist>
-          <p class="mt-1 text-[11px] text-slate-500">Pilih dari daftar atau ketik nama model sesuai host Anda.</p>
+          <div class="flex items-center justify-between mb-1">
+            <label for="modelPicker" class="block text-xs font-bold text-slate-700">Model LLM AI</label>
+            <button type="button" id="refreshModelsBtn" class="text-[11px] font-bold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-50 transition">🔄 Muat model</button>
+          </div>
+          <select id="modelPicker" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+            <option value="">Isi API Host &amp; API Key dulu</option>
+          </select>
+          <input type="text" autocapitalize="off" autocorrect="off" spellcheck="false" id="modelSelect" placeholder="Ketik nama model, mis. cc/claude-sonnet-4" class="hidden mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+          <p id="modelStatus" class="mt-1 text-[11px] text-slate-500 break-words">Daftar model diambil otomatis dari server (<code>/v1/models</code>).</p>
         </div>
       </div>
 
