@@ -1,11 +1,11 @@
-// Naikkan versi ini setiap rilis agar cache lama dibersihkan.
-const CACHE_NAME = 'verba-ai-pwa-v3';
+// __BUILD__ diganti ID build unik oleh Dockerfile, jadi cache lama selalu dibersihkan.
+const CACHE_NAME = 'verba-ai-pwa-__BUILD__';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
-  './js/backend.js',
-  './js/app.js',
+  './js/backend.js?v=__BUILD__',
+  './js/app.js?v=__BUILD__',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png'

@@ -691,6 +691,10 @@
       <button id="saveApiKeyBtn" class="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-sm font-extrabold transition shadow-lg shadow-blue-600/25 active:scale-95 min-h-[44px]">
         Simpan Pengaturan
       </button>
+      <button id="testConnectionBtn" type="button" class="w-full py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 rounded-xl text-sm font-bold transition active:scale-95 min-h-[44px]">
+        🔌 Tes Koneksi API
+      </button>
+      <p id="testConnectionResult" class="hidden text-[11px] leading-relaxed rounded-xl px-3 py-2 break-words"></p>
 
       <!-- Install PWA -->
       <div class="pt-3 border-t border-slate-100 space-y-2">
@@ -746,7 +750,33 @@
   </footer>
 
   <!-- App Script -->
-  <script type="module" src="js/app.js"></script>
+  <script>
+    // Tampilkan error JavaScript di layar supaya kegagalan di HP terlihat.
+    (function () {
+      function showFatal(msg) {
+        var el = document.getElementById('fatalErrorBanner');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'fatalErrorBanner';
+          el.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:9999;background:#b91c1c;color:#fff;font:12px/1.4 system-ui,sans-serif;padding:10px 12px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);word-break:break-word';
+          el.onclick = function () { el.remove(); };
+          document.body.appendChild(el);
+        }
+        el.textContent = '⚠️ Error aplikasi (versi __BUILD__): ' + msg + ' — ketuk untuk tutup';
+      }
+      window.addEventListener('error', function (e) {
+        if (e.target && e.target.tagName === 'SCRIPT') {
+          showFatal('gagal memuat ' + e.target.src);
+        } else {
+          showFatal((e.message || 'unknown') + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : ''));
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        showFatal(String(e.reason && e.reason.message || e.reason));
+      });
+    })();
+  </script>
+  <script type="module" src="js/app.js?v=__BUILD__"></script>
 </body>
 </html>
 

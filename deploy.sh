@@ -47,7 +47,9 @@ if (( PULL )); then
 fi
 
 echo "==> build image web"
-docker compose build "${NO_CACHE[@]}" web
+BUILD_ID="$(date +%Y%m%d%H%M%S)-$(git rev-parse --short HEAD 2>/dev/null || echo local)"
+echo "    BUILD_ID=$BUILD_ID"
+docker compose build "${NO_CACHE[@]}" --build-arg "BUILD_ID=$BUILD_ID" web
 
 echo "==> jalankan stack"
 docker compose up -d --remove-orphans
