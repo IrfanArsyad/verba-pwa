@@ -1,0 +1,16 @@
+# Dependencies & Environment
+node_modules/
+.env
+.env.local
+.env.*.local
+*.env
+
+# VS Code & Copilot Agent Customizations
+.vscode/
+.github/agents/
+.github/prompts/
+
+# OS & Temp Files
+.DS_Store
+Thumbs.db
+*.log

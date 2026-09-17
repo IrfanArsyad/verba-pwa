@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="id" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>VerbaAI - Modern PWA AI English Tutor</title>
+
+  <!-- PWA Standalone Meta & Links -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0066FF">
+  <meta name="description" content="Aplikasi PWA Belajar Bahasa Inggris berbasis AI & Voice Input">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="VerbaAI">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+
+  <!-- Inter & Plus Jakarta Sans Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    html, body {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #f8fafc;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(0, 102, 255, 0.07) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(0, 195, 255, 0.05) 0px, transparent 50%);
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    /* Modern Light Grid Pattern */
+    .bg-grid-pattern {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
+    }
+
+    .pb-safe {
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f8fafc;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Waveform Animation */
+    .wave-bar {
+      width: 4px;
+      height: 16px;
+      background-color: #0066FF;
+      border-radius: 9999px;
+      animation: wave 1.2s ease-in-out infinite;
+    }
+    .wave-bar:nth-child(2) { animation-delay: 0.2s; }
+    .wave-bar:nth-child(3) { animation-delay: 0.4s; }
+    .wave-bar:nth-child(4) { animation-delay: 0.1s; }
+    .wave-bar:nth-child(5) { animation-delay: 0.3s; }
+
+    @keyframes wave {
+      0%, 100% { height: 8px; }
+      50% { height: 28px; }
+    }
+
+    /* Pulse Glow for Mic Recording */
+    @keyframes pulse-glow {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+      70% { box-shadow: 0 0 0 18px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .recording-glow {
+      animation: pulse-glow 1.5s infinite ease-in-out;
+      background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+    }
+  </style>
+</head>
+<body class="bg-[#F4F6FA] text-slate-900 min-h-screen flex flex-col items-center justify-between p-3 sm:p-6 antialiased selection:bg-blue-500/20">
+
+  <!-- Offline Alert Banner -->
+  <div id="offlineBanner" class="hidden w-full max-w-4xl mb-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs px-4 py-2.5 rounded-2xl flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-2.5">
+      <svg class="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      <span>Koneksi terputus (<strong>Offline</strong>). Beberapa fitur AI memerlukan akses internet.</span>
+    </div>
+  </div>
+
+  <!-- Mobile Top Header (Clean Modern White SaaS Style) -->
+  <header class="w-full max-w-4xl flex items-center justify-between py-2.5 px-4 sm:px-5 bg-white/90 border border-slate-200/90 rounded-2xl sm:rounded-3xl backdrop-blur-xl sticky top-2 sm:top-4 z-30 shadow-sm">
+    <div class="flex items-center gap-3">
+      <!-- CuciPOS Inspired SVG Logo Badge -->
+      <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-cyan-400 p-0.5 shadow-md shadow-blue-600/20 shrink-0 relative group cursor-pointer">
+        <img src="icons/icon.svg" alt="VerbaAI Logo" class="w-full h-full object-contain rounded-2xl">
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white absolute -top-0.5 -right-0.5 animate-pulse"></span>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-base sm:text-lg font-extrabold tracking-tight">
+            <span class="text-slate-900">Verba</span><span class="text-blue-600">AI</span>
+          </h1>
+          <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 uppercase tracking-wider">AI English Tutor</span>
+        </div>
+        <p class="text-[11px] text-slate-500 hidden sm:block">Grammar Corrector & Real-time Voice Partner</p>
+      </div>
+    </div>
+    
+    <!-- Header Right Action Buttons -->
+    <div class="flex items-center gap-2">
+      <!-- History Button -->
+      <button id="openHistoryBtn" class="h-9 px-3 rounded-xl bg-slate-100/90 hover:bg-slate-200/80 border border-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
+        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 9 0 0118 0z"/></svg>
+        <span class="hidden sm:inline">Riwayat</span>
+        <span id="historyBadge" class="bg-blue-600 text-white text-[10px] font-extrabold px-1.5 py-0.2 rounded-full hidden">0</span>
+      </button>
+
+      <!-- Settings Button -->
+      <button id="openSettingsBtn" class="h-9 px-3 rounded-xl bg-slate-100/90 hover:bg-slate-200/80 border border-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 active:scale-95" title="Pengaturan">
+        <svg class="w-4 h-4 text-slate-500 hover:text-slate-900 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span class="hidden sm:inline">Pengaturan</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="w-full max-w-4xl flex-1 flex flex-col justify-center my-4 sm:my-6 pb-24 sm:pb-8">
+
+    <!-- =================================================================== -->
+    <!-- 0. MODE HOME / BERANDA VIEW -->
+    <!-- =================================================================== -->
+    <div id="homeView" class="w-full space-y-6 flex flex-col justify-center">
+      
+      <!-- Welcome Hero Card with Modern Light Gradient & Grid -->
+      <div class="bg-gradient-to-br from-indigo-700 via-blue-600 to-blue-700 text-white rounded-[2rem] p-6 sm:p-8 shadow-xl shadow-blue-600/20 relative overflow-hidden bg-grid-pattern border border-indigo-500/20">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+          <div class="space-y-2.5 max-w-lg">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400 text-slate-950 text-xs font-extrabold shadow-sm">
+              <span class="w-2 h-2 rounded-full bg-slate-950 animate-pulse"></span>
+              <span>🔥 5 Hari Streak Belajar</span>
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+              Kuasai Percakapan & Grammar <span class="text-amber-300">Bahasa Inggris AI</span>
+            </h2>
+            <p class="text-xs sm:text-sm text-blue-100 leading-relaxed font-medium">
+              VerbaAI membantu Anda berbicara Bahasa Inggris lebih percaya diri melalui koreksi suara instan & percakapan AI interaktif.
+            </p>
+          </div>
+
+          <!-- Daily Stats Counter Pill -->
+          <div class="grid grid-cols-2 gap-3 w-full sm:w-auto shrink-0">
+            <div class="bg-white/10 backdrop-blur-md border border-white/20 p-3.5 rounded-2xl text-center shadow-inner">
+              <span id="homeTotalCount" class="block text-xl font-extrabold text-white">0</span>
+              <span class="text-[10px] text-blue-100 font-extrabold uppercase tracking-wider">Kalimat</span>
+            </div>
+            <div class="bg-white/10 backdrop-blur-md border border-white/20 p-3.5 rounded-2xl text-center shadow-inner">
+              <span class="block text-xl font-extrabold text-amber-300">100%</span>
+              <span class="text-[10px] text-blue-100 font-extrabold uppercase tracking-wider">AI Accuracy</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Launcher Feature Cards -->
+      <div class="space-y-3">
+        <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 px-1">Pilih Mode Belajar Anda</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          
+          <!-- Card 1: Voice Corrector -->
+          <div id="quickVoiceCard" class="bg-white border border-slate-200/90 rounded-[1.75rem] p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group flex flex-col justify-between space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20 flex items-center justify-center text-xl font-extrabold group-hover:scale-105 transition">
+                🎙️
+              </div>
+              <span class="text-[10px] font-extrabold px-3 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">Koreksi Suara</span>
+            </div>
+            <div>
+              <h4 class="text-sm font-extrabold text-slate-900 group-hover:text-blue-600 transition">Koreksi Suara Instan</h4>
+              <p class="text-xs text-slate-500 mt-1 leading-relaxed font-medium">Ucapkan kalimat Indonesia, AI akan mengoreksi tata bahasa & pelafalannya.</p>
+            </div>
+            <div class="flex items-center gap-1.5 text-xs font-extrabold text-blue-600 pt-2 border-t border-slate-100">
+              <span>Mulai Bicara</span>
+              <svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </div>
+          </div>
+
+          <!-- Card 2: Interactive Chat AI -->
+          <div id="quickChatCard" class="bg-white border border-slate-200/90 rounded-[1.75rem] p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group flex flex-col justify-between space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="w-12 h-12 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-600/20 flex items-center justify-center text-xl font-extrabold group-hover:scale-105 transition">
+                💬
+              </div>
+              <span class="text-[10px] font-extrabold px-3 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">Interaktif</span>
+            </div>
+            <div>
+              <h4 class="text-sm font-extrabold text-slate-900 group-hover:text-blue-600 transition">Chat AI English Tutor</h4>
+              <p class="text-xs text-slate-500 mt-1 leading-relaxed font-medium">Latih percakapan nyata dua arah dengan feedback grammar otomatis.</p>
+            </div>
+            <div class="flex items-center gap-1.5 text-xs font-extrabold text-blue-600 pt-2 border-t border-slate-100">
+              <span>Buka Chat</span>
+              <svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </div>
+          </div>
+
+          <!-- Card 3: Dashboard & Stats -->
+          <div id="quickDashCard" class="bg-white border border-slate-200/90 rounded-[1.75rem] p-5 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer group flex flex-col justify-between space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="w-12 h-12 rounded-2xl bg-emerald-500 text-white shadow-md shadow-emerald-500/20 flex items-center justify-center text-xl font-extrabold group-hover:scale-105 transition">
+                📊
+              </div>
+              <span class="text-[10px] font-extrabold px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Statistik</span>
+            </div>
+            <div>
+              <h4 class="text-sm font-extrabold text-slate-900 group-hover:text-emerald-600 transition">Dashboard & Progress</h4>
+              <p class="text-xs text-slate-500 mt-1 leading-relaxed font-medium">Lihat kosakata baru, riwayat latihan, dan analisis kemajuan Anda.</p>
+            </div>
+            <div class="flex items-center gap-1.5 text-xs font-extrabold text-emerald-600 pt-2 border-t border-slate-100">
+              <span>Lihat Progress</span>
+              <svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Sentence of the Day Card -->
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">🌟</span>
+            <h3 class="text-xs uppercase font-extrabold tracking-wider text-blue-600">Sentence of the Day (Kalimat Hari Ini)</h3>
+          </div>
+          <button id="homeSodSpeakBtn" class="h-8 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
+            <span>Dengarkan</span>
+          </button>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1">
+          <p id="sodEnglish" class="text-base sm:text-lg font-bold text-slate-900 leading-relaxed">"Consistency is the secret to mastering any new language."</p>
+          <p id="sodIndonesian" class="text-xs text-slate-500 italic">🇮🇩 "Konsistensi adalah rahasia untuk menguasai bahasa baru apa pun."</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- 1. MODE VOICE TUTOR VIEW (Koreksi Suara Cepat) -->
+    <!-- =================================================================== -->
+    <div id="voiceView" class="hidden w-full space-y-5 sm:space-y-6 flex flex-col justify-center">
+      
+      <!-- Hero Title Header -->
+      <div class="text-center space-y-1.5 py-1 sm:py-2">
+        <h2 class="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          Koreksi Tata Bahasa & Penjelasan AI
+        </h2>
+        <p class="text-xs sm:text-sm text-slate-500 max-w-xl mx-auto px-2">
+          Ucapkan atau ketik kalimat Bahasa Indonesia Anda, AI akan mengubahnya menjadi Bahasa Inggris natural.
+        </p>
+      </div>
+
+      <!-- Voice Input Card -->
+      <div id="mainInputCard" class="bg-white border border-slate-200/90 rounded-[2rem] p-6 sm:p-8 shadow-xl shadow-slate-200/50 text-center space-y-5 relative overflow-hidden">
+        
+        <!-- Mic Button Section - Large & Touch-Friendly -->
+        <div class="flex flex-col items-center justify-center gap-3 py-2">
+          <button id="micBtn" class="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-tr from-blue-700 via-indigo-600 to-blue-600 hover:from-blue-600 hover:to-indigo-500 text-white flex flex-col items-center justify-center shadow-2xl shadow-blue-600/35 transition-all transform active:scale-95 cursor-pointer group border-4 border-amber-300/40 select-none relative">
+            <svg class="w-10 h-10 sm:w-11 sm:h-11 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+            </svg>
+            <span class="text-[10px] sm:text-xs font-extrabold tracking-wider uppercase mt-1">REKAM</span>
+          </button>
+
+          <!-- Waveform visualizer -->
+          <div id="waveVisualizer" class="hidden items-center gap-1.5 h-6 my-1">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+
+          <p id="micStatus" class="text-xs text-slate-500 font-medium max-w-xs mx-auto">Klik tombol mikrofon di atas untuk mulai merekam ucapan Anda</p>
+        </div>
+
+        <!-- Quick Sample Prompts -->
+        <div class="pt-3 border-t border-slate-100">
+          <p class="text-[11px] text-slate-500 font-medium mb-2 flex items-center justify-center gap-1">
+            <span>💡 Coba contoh kalimat ini:</span>
+          </p>
+          <div class="flex flex-wrap justify-center gap-2">
+            <button class="sample-prompt px-3 py-2 bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 text-slate-700 text-xs rounded-xl transition active:scale-95 min-h-[36px] touch-manipulation">
+              "Saya kemarin pergi ke pasar beli buah-buahan segar"
+            </button>
+            <button class="sample-prompt px-3 py-2 bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 text-slate-700 text-xs rounded-xl transition active:scale-95 min-h-[36px] touch-manipulation">
+              "Bisa tolong bantu saya mencari jalan ke stasiun terdekat?"
+            </button>
+            <button class="sample-prompt px-3 py-2 bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 text-slate-700 text-xs rounded-xl transition active:scale-95 min-h-[36px] touch-manipulation">
+              "Saya ingin belajar berbicara bahasa Inggris dengan lancar"
+            </button>
+          </div>
+        </div>
+
+        <!-- Input Text Form Field -->
+        <div class="flex flex-col sm:flex-row gap-2 pt-1">
+          <input type="text" id="textInput" placeholder="Ketik atau ucapkan kalimat Bahasa Indonesia..." class="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+          <button id="submitBtn" class="bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white px-6 py-3.5 rounded-2xl font-extrabold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 active:scale-95 shrink-0 min-h-[44px]">
+            <span>Koreksi AI</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading State Skeleton -->
+      <div id="loadingState" class="hidden bg-white border border-slate-200 rounded-3xl p-8 text-center space-y-4 shadow-xl">
+        <div class="inline-flex p-3 bg-blue-50 rounded-full text-blue-600 mb-1">
+          <svg class="w-7 h-7 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </div>
+        <div class="space-y-1">
+          <h3 class="text-sm font-bold text-slate-900">Memproses dengan AI 9router...</h3>
+          <p class="text-xs text-slate-500">Menganalisis tata bahasa & membina struktur kalimat Bahasa Inggris Anda.</p>
+        </div>
+      </div>
+
+      <!-- Placeholder Card (Default state before processing) -->
+      <div id="welcomePlaceholder" class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-8 text-center space-y-4 shadow-sm">
+        <div class="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center mx-auto text-xl font-bold">
+          ✨
+        </div>
+        <h3 class="text-sm font-bold text-slate-900">Cara Kerja VerbaAI Tutor</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 text-left pt-1">
+          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1">
+            <span class="text-xs font-bold text-blue-600">1. Input Suara / Teks</span>
+            <p class="text-[11px] text-slate-500">Bicara dalam Bahasa Indonesia sesuai pemikiran Anda sehari-hari.</p>
+          </div>
+          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1">
+            <span class="text-xs font-bold text-blue-600">2. Koreksi AI LLM</span>
+            <p class="text-[11px] text-slate-500">9router AI mengoreksi grammar dan memberikan alternatif kalimat natural.</p>
+          </div>
+          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1">
+            <span class="text-xs font-bold text-blue-600">3. Suara & Grammar</span>
+            <p class="text-[11px] text-slate-500">Dengarkan ucapan aksen Inggris asli dan pelajari penjelasan poinnya.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result Display Card -->
+      <div id="resultCard" class="hidden bg-white border border-slate-200 rounded-3xl p-5 sm:p-8 shadow-xl space-y-5">
+        
+        <!-- Card Header -->
+        <div class="flex items-center justify-between pb-3.5 border-b border-slate-100">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <h3 class="text-xs uppercase font-extrabold tracking-wider text-emerald-600">Hasil Koreksi Tata Bahasa</h3>
+          </div>
+          
+          <!-- Controls: Putar & Copy -->
+          <div class="flex items-center gap-2">
+            <button id="speakBtn" class="h-9 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95" title="Putar Suara">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
+              <span class="hidden sm:inline">Putar</span>
+            </button>
+            <button id="copyBtn" class="h-9 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95" title="Salin Teks">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              <span class="hidden sm:inline">Salin</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Input Indonesian -->
+        <div>
+          <p class="text-[11px] font-bold text-slate-500 mb-1.5">🇮🇩 Input Teks Asli:</p>
+          <p id="indonesianOutput" class="text-xs sm:text-sm text-slate-700 bg-slate-50 p-4 rounded-2xl border border-slate-200 italic"></p>
+        </div>
+
+        <!-- English Translation -->
+        <div>
+          <p class="text-[11px] font-bold text-blue-600 mb-1.5">🇬🇧 English Translation (Kalimat Benar):</p>
+          <div class="bg-gradient-to-r from-blue-50 via-cyan-50 to-slate-50 p-5 sm:p-6 rounded-2xl border border-blue-200 shadow-inner">
+            <p id="englishOutput" class="text-lg sm:text-2xl font-extrabold text-blue-950 leading-relaxed tracking-tight"></p>
+          </div>
+        </div>
+
+        <!-- Point-by-Point Grammar Explanation -->
+        <div>
+          <p class="text-[11px] font-bold text-slate-500 mb-1.5">📖 Penjelasan Grammar (Poin demi Poin):</p>
+          <div id="explanationOutput" class="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 text-xs sm:text-sm text-slate-800"></div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- 2. MODE CHAT AI VIEW (Practice Conversation Interaktif & Light UI) -->
+    <!-- =================================================================== -->
+    <div id="chatViewCard" class="hidden w-full flex-1 flex flex-col bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden min-h-[540px]">
+      
+      <!-- Chat Header -->
+      <div class="px-4 sm:px-6 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50/90 backdrop-blur-md shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-cyan-500 flex items-center justify-center text-white font-extrabold text-sm shadow-md shadow-blue-500/20">
+              🤖
+            </div>
+            <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white absolute -bottom-0.5 -right-0.5 animate-pulse"></span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-extrabold text-slate-900 tracking-tight">VerbaAI Conversation Partner</h3>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">Online</span>
+            </div>
+            <p class="text-[11px] text-slate-500">Latih percakapan & koreksi grammar otomatis • Tersimpan lokal</p>
+          </div>
+        </div>
+        
+        <!-- Action in Chat Header: Clear Chat -->
+        <button id="clearChatBtn" class="h-8 px-3 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 border border-slate-200 hover:border-red-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95" title="Bersihkan Percakapan Chat">
+          <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          <span class="hidden sm:inline">Bersihkan</span>
+        </button>
+      </div>
+
+      <!-- Chat Message History List -->
+      <div id="chatMessageList" class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 min-h-[340px] max-h-[480px]">
+        <!-- Welcome Message Bubble from AI Tutor -->
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0 text-xs font-bold mt-1">
+            🤖
+          </div>
+          <div class="space-y-2 max-w-[85%] sm:max-w-[78%]">
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-sm p-4 text-xs sm:text-sm text-slate-800 shadow-sm space-y-2">
+              <p class="font-bold text-slate-900 text-sm">Hello! 👋 I'm your AI English Tutor.</p>
+              <p class="text-slate-700 leading-relaxed">How are you feeling today? You can type or speak in English or Indonesian, and I will guide your conversation & grammar!</p>
+              <div class="text-[11px] text-slate-500 pt-2 border-t border-slate-200 italic flex items-center gap-1.5">
+                <span>🇮🇩 Halo! Saya Tutor AI Anda. Percakapan ini otomatis tersimpan di HP/Browser Anda. Ucapkan atau ketik apa saja!</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat Typing Indicator -->
+        <div id="chatTypingIndicator" class="hidden flex items-start gap-3">
+          <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0 text-xs font-bold mt-1">
+            🤖
+          </div>
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 text-xs text-slate-600 shadow-sm flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-blue-600 animate-bounce"></span>
+            <span class="w-2 h-2 rounded-full bg-cyan-500 animate-bounce [animation-delay:0.2s]"></span>
+            <span class="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:0.4s]"></span>
+            <span class="text-slate-500 text-xs ml-1">Tutor AI sedang berpikir & menyusun balasan...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Quick Suggestion Chips -->
+      <div class="px-4 py-2.5 bg-slate-50/80 border-t border-slate-200 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
+        <span class="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider shrink-0 flex items-center gap-1">
+          <span>💡 Topik:</span>
+        </span>
+        <button class="chat-suggest-chip whitespace-nowrap px-3 py-1.5 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-700 text-[11px] rounded-xl transition active:scale-95 flex items-center gap-1">
+          <span>💼 "Can we practice a job interview in English?"</span>
+        </button>
+        <button class="chat-suggest-chip whitespace-nowrap px-3 py-1.5 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-700 text-[11px] rounded-xl transition active:scale-95 flex items-center gap-1">
+          <span>✈️ "What are useful English phrases for traveling abroad?"</span>
+        </button>
+        <button class="chat-suggest-chip whitespace-nowrap px-3 py-1.5 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-700 text-[11px] rounded-xl transition active:scale-95 flex items-center gap-1">
+          <span>☕ "Halo! Boleh bantu koreksi bahasa Inggris saya?"</span>
+        </button>
+      </div>
+
+      <!-- Chat Input Footer Bar -->
+      <div class="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center gap-2 shrink-0">
+        <!-- Quick Voice Recording Button for Chat -->
+        <button id="chatMicBtn" class="w-11 h-11 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center shrink-0 transition active:scale-95 group shadow-sm" title="Bicara untuk pesan suara (STT)">
+          <svg class="w-5 h-5 text-blue-600 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+        </button>
+
+        <!-- Chat Text Input Field -->
+        <div class="flex-1 relative">
+          <input type="text" id="chatInputText" placeholder="Ketik atau ucapkan pesan Anda..." class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+        </div>
+
+        <!-- Chat Send Button -->
+        <button id="chatSendBtn" class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white flex items-center justify-center shrink-0 transition shadow-md shadow-blue-600/20 active:scale-95 min-h-[44px]" title="Kirim Pesan">
+          <svg class="w-5 h-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- 3. MODE DASHBOARD & RIWAYAT VIEW -->
+    <!-- =================================================================== -->
+    <div id="dashboardView" class="hidden w-full space-y-5 sm:space-y-6 flex flex-col justify-center">
+      
+      <!-- Dashboard Title Header -->
+      <div class="flex items-center justify-between py-1 border-b border-slate-200 pb-3">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">Dashboard & Progress Belajar</h2>
+          <p class="text-xs text-slate-500">Pantau statistik kosakata & riwayat koreksi AI Anda.</p>
+        </div>
+        <button id="dashClearAllBtn" class="h-8 px-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          <span>Hapus Semua</span>
+        </button>
+      </div>
+
+      <!-- Stats Metric Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-white border border-slate-200 p-4 rounded-2xl space-y-1 shadow-sm">
+          <span class="text-xs text-slate-500 font-medium">Total Kalimat</span>
+          <p id="dashTotalSentences" class="text-2xl font-extrabold text-blue-600">0</p>
+        </div>
+        <div class="bg-white border border-slate-200 p-4 rounded-2xl space-y-1 shadow-sm">
+          <span class="text-xs text-slate-500 font-medium">Interaksi Voice</span>
+          <p id="dashVoiceInteractions" class="text-2xl font-extrabold text-purple-600">0</p>
+        </div>
+        <div class="bg-white border border-slate-200 p-4 rounded-2xl space-y-1 shadow-sm">
+          <span class="text-xs text-slate-500 font-medium">Aksen Audio TTS</span>
+          <p class="text-base font-extrabold text-emerald-600">en-US Native</p>
+        </div>
+        <div class="bg-white border border-slate-200 p-4 rounded-2xl space-y-1 shadow-sm">
+          <span class="text-xs text-slate-500 font-medium">Status PWA</span>
+          <p class="text-base font-extrabold text-cyan-600">Ready / Offline</p>
+        </div>
+      </div>
+
+      <!-- Embedded History List Container -->
+      <div class="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+        <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-500">Daftar Riwayat Kalimat Dipelajari</h3>
+        <div id="dashHistoryList" class="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+          <!-- Dynamic history items rendered here -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- FOOTER NAVIGASI BAWAH NATIVE MOBILE (Light Mode) -->
+  <!-- ===================================================================== -->
+  <nav id="bottomNavBar" class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200 px-1.5 sm:px-6 py-2 flex items-center justify-around pb-safe shadow-2xl">
+    
+    <!-- 1. Home Button (Beranda) -->
+    <button id="navHomeBtn" class="flex flex-col items-center justify-center gap-1 py-1 px-2.5 sm:px-5 rounded-2xl text-blue-600 font-extrabold transition active:scale-95 group min-h-[44px]">
+      <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 group-hover:bg-blue-100 transition shadow-sm">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 00-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      </div>
+      <span class="text-[10px] sm:text-xs tracking-tight">Beranda</span>
+    </button>
+
+    <!-- 2. Voice Mode Button -->
+    <button id="navVoiceBtn" class="flex flex-col items-center justify-center gap-1 py-1 px-2.5 sm:px-5 rounded-2xl text-slate-500 font-medium hover:text-slate-900 transition active:scale-95 group min-h-[44px]">
+      <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-slate-200 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+      </div>
+      <span class="text-[10px] sm:text-xs tracking-tight">Voice</span>
+    </button>
+
+    <!-- 3. Chat AI Mode Button -->
+    <button id="navChatBtn" class="flex flex-col items-center justify-center gap-1 py-1 px-2.5 sm:px-5 rounded-2xl text-slate-500 font-medium hover:text-slate-900 transition active:scale-95 group min-h-[44px]">
+      <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-slate-200 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+      </div>
+      <span class="text-[10px] sm:text-xs tracking-tight">Chat AI</span>
+    </button>
+
+    <!-- 4. Dashboard Button -->
+    <button id="navDashboardBtn" class="flex flex-col items-center justify-center gap-1 py-1 px-2.5 sm:px-5 rounded-2xl text-slate-500 font-medium hover:text-slate-900 transition active:scale-95 relative group min-h-[44px]">
+      <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-slate-200 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      </div>
+      <span id="navHistoryBadge" class="absolute top-1 right-2.5 sm:right-5 bg-blue-600 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full hidden">0</span>
+      <span class="text-[10px] sm:text-xs tracking-tight">Dashboard</span>
+    </button>
+
+    <!-- 5. Pengaturan Button -->
+    <button id="navPengaturanBtn" class="flex flex-col items-center justify-center gap-1 py-1 px-2.5 sm:px-5 rounded-2xl text-slate-500 font-medium hover:text-slate-900 transition active:scale-95 group min-h-[44px]">
+      <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-slate-200 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      </div>
+      <span class="text-[10px] sm:text-xs tracking-tight">Akun</span>
+    </button>
+  </nav>
+
+  <!-- Settings Modal (Clean White Modern Modal) -->
+  <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 opacity-0 pointer-events-none">
+    <div id="settingsModalContent" class="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4 transform scale-95 transition-transform duration-300">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900">Pengaturan API & Voice</h3>
+          <p class="text-[11px] text-slate-500">Konfigurasi 9router LLM & Homelab TTS</p>
+        </div>
+        <button id="closeSettingsBtn" class="text-slate-400 hover:text-slate-900 p-1 rounded-xl hover:bg-slate-100 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      
+      <!-- LLM 9router Config -->
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">9router API Key</label>
+          <input type="password" id="apiKeyInput" placeholder="sk-9router-..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Model LLM AI</label>
+          <select id="modelSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+            <option value="deepseek/deepseek-chat">DeepSeek Chat (Direkomendasikan)</option>
+            <option value="openai/gpt-4o">GPT-4o</option>
+            <option value="anthropic/claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- TTS Provider Config -->
+      <div class="space-y-3 pt-3 border-t border-slate-100">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Provider Suara TTS</label>
+          <select id="ttsProviderSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+            <option value="browser">Browser Web Speech API (Bawaan)</option>
+            <option value="kokoro">Homelab Kokoro AI TTS</option>
+          </select>
+        </div>
+        <div id="kokoroUrlContainer" class="hidden space-y-1">
+          <label class="block text-xs font-bold text-slate-700 mb-1">Kokoro API Endpoint URL</label>
+          <input type="text" id="kokoroUrlInput" placeholder="http://localhost:8880/v1/audio/speech" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+        </div>
+      </div>
+
+      <button id="saveApiKeyBtn" class="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-extrabold transition shadow-lg shadow-blue-600/25 active:scale-95 min-h-[44px]">
+        Simpan Pengaturan
+      </button>
+    </div>
+  </div>
+
+  <!-- History Drawer -->
+  <div id="historyDrawer" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 transition-opacity duration-300 opacity-0 pointer-events-none flex justify-end">
+    <div id="historyDrawerContent" class="w-full max-w-md bg-white border-l border-slate-200 h-full p-6 flex flex-col shadow-2xl transform translate-x-full transition-transform duration-300">
+      
+      <!-- Drawer Header -->
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 9 0 0118 0z"/></svg>
+          <h2 class="text-sm font-bold text-slate-900">Riwayat Belajar</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="clearHistoryBtn" class="text-[11px] text-red-600 hover:text-red-700 font-semibold px-3 py-1 bg-red-50 border border-red-200 rounded-xl transition">
+            Hapus Semua
+          </button>
+          <button id="closeHistoryBtn" class="text-slate-400 hover:text-slate-900 p-1 rounded-xl hover:bg-slate-100 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- History List -->
+      <div id="historyList" class="flex-1 overflow-y-auto space-y-3 py-4 pr-1">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Drawer Footer -->
+      <div class="pt-3 border-t border-slate-100 text-center text-[11px] text-slate-500">
+        Klik kartu riwayat untuk memuat kembali ke tampilan utama.
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-2xl text-xs font-semibold transition-all duration-300 transform translate-y-20 opacity-0 z-50 pointer-events-none flex items-center gap-2">
+    <span>Notification</span>
+  </div>
+
+  <!-- Footer -->
+  <footer class="w-full max-w-4xl text-center py-4 text-[11px] text-slate-500 border-t border-slate-200 hidden sm:block">
+    VerbaAI &bull; Modern Light PWA AI English Tutor & Speech Corrector
+  </footer>
+
+  <!-- App Script -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
+

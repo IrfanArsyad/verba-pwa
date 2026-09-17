@@ -1,0 +1,18 @@
+{
+  "name": "VerbaAI - AI English Tutor",
+  "short_name": "VerbaAI",
+  "description": "Aplikasi PWA Belajar Bahasa Inggris berbasis AI & Suara (Web Speech STT/TTS + 9router LLM)",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#0066FF",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
