@@ -13,7 +13,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="VerbaAI">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 
   <!-- Inter & Plus Jakarta Sans Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -614,61 +616,73 @@
   </nav>
 
   <!-- Settings Modal (Clean White Modern Modal) -->
-  <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300 opacity-0 pointer-events-none">
-    <div id="settingsModalContent" class="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4 transform scale-95 transition-transform duration-300">
+  <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-300 opacity-0 pointer-events-none">
+    <div id="settingsModalContent" class="w-full max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl space-y-4 transform scale-95 transition-transform duration-300">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
           <h3 class="text-sm font-bold text-slate-900">Pengaturan API & Voice</h3>
-          <p class="text-[11px] text-slate-500">Konfigurasi 9router LLM & Homelab TTS</p>
+          <p class="text-[11px] text-slate-500">Host, API Key, model LLM, dan suara TTS</p>
         </div>
-        <button id="closeSettingsBtn" class="text-slate-400 hover:text-slate-900 p-1 rounded-xl hover:bg-slate-100 transition">
+        <button id="closeSettingsBtn" class="text-slate-400 hover:text-slate-900 p-2 rounded-xl hover:bg-slate-100 transition" title="Tutup">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
-      
-      <!-- LLM 9router Config -->
+
+      <!-- LLM API Config -->
       <div class="space-y-3">
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">9router API Key</label>
+          <label for="apiHostInput" class="block text-xs font-bold text-slate-700 mb-1">API Host / Domain</label>
+          <input type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="apiHostInput" placeholder="https://api.domainanda.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+          <p class="mt-1 text-[11px] text-slate-500">Cukup isi domain. Path <code>/v1/chat/completions</code> ditambahkan otomatis (API kompatibel OpenAI).</p>
+        </div>
+        <div>
+          <label for="apiKeyInput" class="block text-xs font-bold text-slate-700 mb-1">API Key</label>
           <div class="relative flex items-center">
-            <input type="password" id="apiKeyInput" placeholder="sk-9router-..." class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
-            <button type="button" id="toggleApiKeyVisibility" class="absolute right-2.5 text-slate-400 hover:text-slate-700 p-1.5 transition" title="Lihat API Key">
+            <input type="password" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" id="apiKeyInput" placeholder="sk-..." class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3.5 pr-11 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+            <button type="button" id="toggleApiKeyVisibility" class="absolute right-1.5 text-slate-400 hover:text-slate-700 p-2 transition" title="Lihat API Key">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
             </button>
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">9router API Host Endpoint URL</label>
-          <input type="text" id="apiHostInput" placeholder="https://api.9router.com/v1/chat/completions" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
-        </div>
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">Model LLM AI</label>
-          <select id="modelSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+          <label for="modelSelect" class="block text-xs font-bold text-slate-700 mb-1">Model LLM AI</label>
+          <input type="text" list="modelOptions" autocapitalize="off" autocorrect="off" spellcheck="false" id="modelSelect" placeholder="deepseek/deepseek-chat" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+          <datalist id="modelOptions">
             <option value="deepseek/deepseek-chat">DeepSeek Chat (Direkomendasikan)</option>
             <option value="openai/gpt-4o">GPT-4o</option>
             <option value="anthropic/claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-          </select>
+          </datalist>
+          <p class="mt-1 text-[11px] text-slate-500">Pilih dari daftar atau ketik nama model sesuai host Anda.</p>
         </div>
       </div>
 
       <!-- TTS Provider Config -->
       <div class="space-y-3 pt-3 border-t border-slate-100">
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">Provider Suara TTS</label>
-          <select id="ttsProviderSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+          <label for="ttsProviderSelect" class="block text-xs font-bold text-slate-700 mb-1">Provider Suara TTS</label>
+          <select id="ttsProviderSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
             <option value="browser">Browser Web Speech API (Bawaan)</option>
             <option value="kokoro">Homelab Kokoro AI TTS</option>
           </select>
         </div>
         <div id="kokoroUrlContainer" class="hidden space-y-1">
-          <label class="block text-xs font-bold text-slate-700 mb-1">Kokoro API Endpoint URL</label>
-          <input type="text" id="kokoroUrlInput" placeholder="http://localhost:8880/v1/audio/speech" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
+          <label for="kokoroUrlInput" class="block text-xs font-bold text-slate-700 mb-1">Kokoro API Endpoint URL</label>
+          <input type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="kokoroUrlInput" placeholder="http://localhost:8880/v1/audio/speech" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition min-h-[44px]">
         </div>
       </div>
 
-      <button id="saveApiKeyBtn" class="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-xs font-extrabold transition shadow-lg shadow-blue-600/25 active:scale-95 min-h-[44px]">
+      <button id="saveApiKeyBtn" class="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-xl text-sm font-extrabold transition shadow-lg shadow-blue-600/25 active:scale-95 min-h-[44px]">
         Simpan Pengaturan
       </button>
+
+      <!-- Install PWA -->
+      <div class="pt-3 border-t border-slate-100 space-y-2">
+        <p class="text-xs font-bold text-slate-700">Pasang Aplikasi di HP</p>
+        <button id="installAppBtn" type="button" class="hidden w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition active:scale-95 min-h-[44px]">
+          📲 Install VerbaAI
+        </button>
+        <p id="installHint" class="text-[11px] text-slate-500 leading-relaxed"></p>
+      </div>
     </div>
   </div>
 

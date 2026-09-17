@@ -1,62 +1,54 @@
-const CACHE_NAME = 'verba-ai-pwa-v1';
+// Naikkan versi ini setiap rilis agar cache lama dibersihkan.
+const CACHE_NAME = 'verba-ai-pwa-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
   './js/backend.js',
-  './js/app.js'
+  './js/app.js',
+  './icons/icon.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 // Install Event - Cache Static Assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Caching core PWA assets');
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(ASSETS_TO_CACHE))
+      .then(() => self.skipWaiting())
   );
 });
 
 // Activate Event - Clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            console.log('[SW] Clearing old cache:', cache);
-            return caches.delete(cache);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
+    caches.keys()
+      .then((cacheNames) => Promise.all(
+        cacheNames.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch Event - Network First for API, Cache First for Static Assets
+// Fetch Event - Network First untuk file aplikasi sendiri, cache hanya
+// dipakai saat offline. Request ke domain lain (API LLM, Kokoro, font, CDN)
+// tidak disentuh sama sekali.
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const { request } = event;
+  const url = new URL(request.url);
 
-  // Bypass cache for API calls (9router / Kokoro)
-  if (url.hostname.includes('api.9router.com') || url.pathname.includes('/chat/completions')) {
-    return event.respondWith(fetch(event.request));
-  }
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        // Cache new static files dynamically
-        if (event.request.method === 'GET' && networkResponse.status === 200) {
+    fetch(request)
+      .then((networkResponse) => {
+        if (networkResponse.ok) {
           const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
         }
         return networkResponse;
-      });
-    })
+      })
+      .catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html')))
   );
 });
