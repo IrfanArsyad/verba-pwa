@@ -528,6 +528,7 @@ export async function transcribeAudio(audioBlob, apiKey, options = {}) {
  */
 export const TTSProvider = {
   BROWSER: 'browser',
+  SERVER: 'server',
   KOKORO_HOMELAB: 'kokoro'
 };
 
@@ -538,7 +539,9 @@ const TTS_CONFIG_STORAGE_KEY = 'verba_ai_tts_config';
  */
 export const DEFAULT_TTS_CONFIG = {
   provider: TTSProvider.BROWSER,
-  kokoroUrl: 'http://localhost:8880/v1/audio/speech',
+  kokoroUrl: '',
+  serverModel: '',
+  serverVoice: '',
   voice: 'af_heart',
   rate: 0.9,
   lang: 'en-US'
@@ -574,66 +577,176 @@ export function saveTTSConfig(newConfig = {}) {
   }
 }
 
-/**
- * Synthesizer Suara Modular
- * Mendukung pembacaan suara via Browser Web Speech API atau Homelab Kokoro API
- * @param {string} text - Teks bahasa Inggris yang akan diucapkan
- * @param {object} customConfig - Opsi konfigurasi opsional untuk melakukan override
- * @returns {Promise<{success: boolean, provider: string}>}
- */
-export async function synthesizeTTS(text, customConfig = {}) {
-  // Gabungkan konfigurasi yang tersimpan di localStorage dengan override yang diberikan
-  const activeConfig = { ...getTTSConfig(), ...customConfig };
-  const provider = activeConfig.provider || TTSProvider.BROWSER;
+// ---------------------------------------------------------------------------
+// Pemutar audio bersama. iOS hanya mengizinkan suara yang dipicu ketukan;
+// elemen yang sudah "dibuka" sekali saat diketuk bisa dipakai ulang setelahnya.
+// ---------------------------------------------------------------------------
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+let sharedAudio = null;
+let audioUnlocked = false;
 
-  // Jika provider dipilih adalah Kokoro Homelab API
-  if (provider === TTSProvider.KOKORO_HOMELAB) {
-    const kokoroUrl = activeConfig.kokoroUrl || DEFAULT_TTS_CONFIG.kokoroUrl;
-    try {
-      const res = await fetch(kokoroUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'kokoro',
-          input: text,
-          voice: activeConfig.voice || 'af_heart',
-          response_format: 'mp3'
-        })
-      });
-      if (!res.ok) throw new Error(`Kokoro TTS HTTP error status: ${res.status}`);
-      const blob = await res.blob();
-      const audioUrl = URL.createObjectURL(blob);
-      const audio = new Audio(audioUrl);
-      await audio.play();
-      return { success: true, provider: TTSProvider.KOKORO_HOMELAB };
-    } catch (err) {
-      console.warn('Kokoro Homelab TTS gagal, mengalihkan secara otomatis ke Browser SpeechSynthesis:', err);
-      // Fallback ke browser jika Kokoro Homelab offline/gagal
-    }
+function getSharedAudio() {
+  if (!sharedAudio) {
+    sharedAudio = new Audio();
+    sharedAudio.setAttribute('playsinline', '');
+  }
+  return sharedAudio;
+}
+
+/**
+ * Panggil dari event ketukan pengguna (pointerdown/click) untuk membuka
+ * izin pemutaran audio & SpeechSynthesis di iOS.
+ */
+export function unlockAudioPlayback() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+
+  try {
+    const audio = getSharedAudio();
+    audio.src = SILENT_WAV;
+    const p = audio.play();
+    if (p && p.catch) p.catch(() => { audioUnlocked = false; });
+  } catch (_) {
+    audioUnlocked = false;
   }
 
-  // Provider Default: Browser SpeechSynthesis
+  if ('speechSynthesis' in window) {
+    const warmup = new SpeechSynthesisUtterance(' ');
+    warmup.volume = 0;
+    window.speechSynthesis.speak(warmup);
+  }
+}
+
+async function playAudioBlob(blob) {
+  const audio = getSharedAudio();
+  const url = URL.createObjectURL(blob);
+  audio.pause();
+  audio.src = url;
+  try {
+    await audio.play();
+    await new Promise((resolve) => {
+      const done = () => {
+        audio.removeEventListener('ended', done);
+        audio.removeEventListener('error', done);
+        resolve();
+      };
+      audio.addEventListener('ended', done);
+      audio.addEventListener('error', done);
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Utterance disimpan di luar fungsi agar tidak dibersihkan garbage collector
+// sebelum selesai (bug Chrome/Safari yang membuat onend tidak pernah terpanggil).
+let activeUtterance = null;
+
+function speakWithBrowser(text, config) {
   return new Promise((resolve, reject) => {
     if (!('speechSynthesis' in window)) {
-      return reject(new Error('Browser ini tidak mendukung fitur SpeechSynthesis (TTS).'));
+      reject(new Error('Browser ini tidak mendukung suara (SpeechSynthesis).'));
+      return;
     }
-    
-    // Hentikan suara yang sedang berputar sebelum memulai suara baru
-    window.speechSynthesis.cancel();
-    
+
+    const synth = window.speechSynthesis;
+    if (synth.speaking || synth.pending) synth.cancel();
+
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = activeConfig.lang || 'en-US';
-    utterance.rate = activeConfig.rate || 0.9;
-    
-    // Cari dan pasangkan voice Bahasa Inggris jika tersedia di browser
-    const voices = window.speechSynthesis.getVoices();
-    const enVoice = voices.find(v => v.lang.startsWith('en-US') || v.lang.startsWith('en'));
+    utterance.lang = config.lang || 'en-US';
+    utterance.rate = config.rate || 0.9;
+
+    const voices = synth.getVoices();
+    const enVoice = voices.find((v) => v.lang === 'en-US' && v.localService)
+      || voices.find((v) => v.lang.replace('_', '-').startsWith('en-US'))
+      || voices.find((v) => v.lang.startsWith('en'));
     if (enVoice) utterance.voice = enVoice;
 
-    utterance.onend = () => resolve({ success: true, provider: TTSProvider.BROWSER });
-    utterance.onerror = (e) => reject(e);
+    // Batas waktu supaya tombol tidak terkunci kalau browser diam saja
+    const timeout = setTimeout(() => resolve({ success: true, provider: TTSProvider.BROWSER }), Math.max(4000, text.length * 120));
+    utterance.onend = () => {
+      clearTimeout(timeout);
+      resolve({ success: true, provider: TTSProvider.BROWSER });
+    };
+    utterance.onerror = (e) => {
+      clearTimeout(timeout);
+      if (e.error === 'interrupted' || e.error === 'canceled') {
+        resolve({ success: true, provider: TTSProvider.BROWSER });
+      } else {
+        reject(new Error(`Suara browser gagal: ${e.error || 'unknown'}`));
+      }
+    };
 
-    window.speechSynthesis.speak(utterance);
+    activeUtterance = utterance;
+    // Jeda singkat setelah cancel(); tanpa ini Chrome/Safari kadang membuang ucapan baru
+    setTimeout(() => synth.speak(activeUtterance), 60);
+    if (synth.paused) synth.resume();
   });
 }
 
+async function fetchSpeech(url, headers, body) {
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const errText = (await res.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    let message = errText;
+    try { message = JSON.parse(errText).error?.message || errText; } catch (_) { /* bukan JSON */ }
+    throw new Error(`HTTP ${res.status}: ${message.slice(0, 200)}`);
+  }
+  return res.blob();
+}
+
+/**
+ * Synthesizer Suara Modular
+ * Provider: Browser SpeechSynthesis, Server (Groq/OpenAI /v1/audio/speech), atau Kokoro.
+ * Kalau provider server gagal, otomatis jatuh ke suara browser dan
+ * mengembalikan `fallbackError` berisi alasannya.
+ * @param {string} text - Teks bahasa Inggris yang akan diucapkan
+ * @param {object} customConfig - Opsi konfigurasi opsional untuk melakukan override
+ * @returns {Promise<{success: boolean, provider: string, fallbackError?: string}>}
+ */
+export async function synthesizeTTS(text, customConfig = {}) {
+  const activeConfig = { ...getTTSConfig(), ...customConfig };
+  const provider = activeConfig.provider || TTSProvider.BROWSER;
+  let fallbackError = '';
+
+  if (provider === TTSProvider.SERVER) {
+    try {
+      const host = activeConfig.serverHost || '';
+      const isGroq = /groq\.com/i.test(host);
+      const blob = await fetchSpeech(
+        resolveApiUrl(host, '/audio/speech'),
+        { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeConfig.serverKey || ''}` },
+        {
+          model: activeConfig.serverModel || (isGroq ? 'canopylabs/orpheus-v1-english' : 'tts-1'),
+          voice: activeConfig.serverVoice || (isGroq ? 'hannah' : 'alloy'),
+          input: text,
+          response_format: 'wav'
+        }
+      );
+      await playAudioBlob(blob);
+      return { success: true, provider: TTSProvider.SERVER };
+    } catch (err) {
+      console.warn('TTS server gagal, beralih ke suara browser:', err);
+      fallbackError = err.message;
+    }
+  }
+
+  if (provider === TTSProvider.KOKORO_HOMELAB) {
+    try {
+      if (!activeConfig.kokoroUrl) throw new Error('Kokoro URL belum diisi.');
+      const blob = await fetchSpeech(
+        activeConfig.kokoroUrl,
+        { 'Content-Type': 'application/json' },
+        { model: 'kokoro', input: text, voice: activeConfig.voice || 'af_heart', response_format: 'mp3' }
+      );
+      await playAudioBlob(blob);
+      return { success: true, provider: TTSProvider.KOKORO_HOMELAB };
+    } catch (err) {
+      console.warn('Kokoro TTS gagal, beralih ke suara browser:', err);
+      fallbackError = err.message;
+    }
+  }
+
+  const result = await speakWithBrowser(text, activeConfig);
+  return fallbackError ? { ...result, fallbackError } : result;
+}
