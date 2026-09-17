@@ -50,7 +50,6 @@ The JSON schema MUST follow this exact structure:
 // ============================================================================
 // 2. 9ROUTER API REQUEST HANDLER & JSON PARSER
 // ============================================================================
-export const DEFAULT_API_HOST = 'https://api.9router.com';
 
 /**
  * Ubah isian host dari pengaturan menjadi URL chat completions lengkap.
@@ -66,7 +65,8 @@ export function resolveChatEndpoint(host) {
  * Jika host sudah berupa URL endpoint lengkap, bagian endpoint-nya dibuang dulu.
  */
 export function resolveApiUrl(host, path) {
-  let url = (host || '').trim() || DEFAULT_API_HOST;
+  let url = (host || '').trim();
+  if (!url) throw new Error('API Host belum diisi di Pengaturan.');
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   url = url.replace(/\/+$/, '').replace(/\/(chat\/completions|audio\/[a-z]+)$/i, '');
   if (!/\/v\d+$/i.test(url)) url += '/v1';

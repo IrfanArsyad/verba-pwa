@@ -7,7 +7,6 @@ import {
   getTTSConfig, 
   saveTTSConfig, 
   TTSProvider,
-  DEFAULT_API_HOST,
   DEFAULT_STT_MODEL,
   transcribeAudio,
   resolveChatEndpoint
@@ -123,8 +122,12 @@ function loadSettings() {
   const savedKey = localStorage.getItem('9router_api_key') || '';
   if (savedKey && apiKeyInput) apiKeyInput.value = savedKey;
 
-  const savedHost = localStorage.getItem('9router_api_host') || DEFAULT_API_HOST;
-  if (savedHost && apiHostInput) apiHostInput.value = savedHost;
+  // api.9router.com hanya website 9Router (bukan API), jadi default lama dibuang.
+  if (/api\.9router\.com/i.test(localStorage.getItem('9router_api_host') || '')) {
+    localStorage.removeItem('9router_api_host');
+  }
+  const savedHost = localStorage.getItem('9router_api_host') || '';
+  if (apiHostInput) apiHostInput.value = savedHost;
 
   const savedModel = localStorage.getItem('9router_model') || 'deepseek/deepseek-chat';
   if (modelSelect) modelSelect.value = savedModel;
@@ -206,6 +209,21 @@ function initSpeechRecognition() {
   recognition.onend = () => {
     if (!mediaRecorder) stopRecordingUI();
   };
+}
+
+// Pastikan host & key sudah diisi; kalau belum, buka Pengaturan.
+function ensureApiConfig(apiKey, apiHost) {
+  if (!apiHost) {
+    showToast('Isi API Host dulu di Pengaturan.');
+    openSettingsModal();
+    return false;
+  }
+  if (!apiKey) {
+    showToast('Isi API Key dulu di Pengaturan.');
+    openSettingsModal();
+    return false;
+  }
+  return true;
 }
 
 function getSttProvider() {
@@ -306,7 +324,7 @@ function toggleRecording(source = 'voice') {
 // Rekam audio dengan MediaRecorder lalu transkripsi via /v1/audio/transcriptions
 async function startServerRecording() {
   const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
-  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || DEFAULT_API_HOST).trim();
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || '').trim();
   const sttModel = (sttModelInput && sttModelInput.value.trim()) || localStorage.getItem('verba_stt_model') || DEFAULT_STT_MODEL;
 
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -315,11 +333,7 @@ async function startServerRecording() {
     return;
   }
 
-  if (!apiKey) {
-    showToast('Isi API Key dulu di Pengaturan untuk rekam suara.');
-    openSettingsModal();
-    return;
-  }
+  if (!ensureApiConfig(apiKey, apiHost)) return;
 
   let stream;
   try {
@@ -413,7 +427,7 @@ function stopRecordingUI() {
 async function handleTranslate(inputOverride) {
   const text = (inputOverride || textInput.value).trim();
   const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
-  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || DEFAULT_API_HOST).trim();
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || '').trim();
   const selectedModel = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
 
   if (!text) {
@@ -421,15 +435,11 @@ async function handleTranslate(inputOverride) {
     return;
   }
 
-  if (!apiKey) {
-    showToast('Isi API Key dulu di Pengaturan.');
-    openSettingsModal();
-    return;
-  }
+  if (!ensureApiConfig(apiKey, apiHost)) return;
 
   // Simpan Pengaturan API Key & Model & Host
   localStorage.setItem('9router_api_key', apiKey);
-  localStorage.setItem('9router_api_host', apiHost || DEFAULT_API_HOST);
+  localStorage.setItem('9router_api_host', apiHost);
   if (modelSelect) localStorage.setItem('9router_model', selectedModel);
 
   // Tampilkan UI Loading State
@@ -439,7 +449,7 @@ async function handleTranslate(inputOverride) {
     // Panggil Layanan Backend AI (9router API)
     const result = await processIndonesianToEnglish(text, apiKey, {
       model: selectedModel,
-      endpoint: apiHost || DEFAULT_API_HOST
+      endpoint: apiHost
     });
 
     currentResult = result;
@@ -698,18 +708,14 @@ function loadSavedChatHistory() {
 async function handleSendChatMessage() {
   const text = (chatInputText ? chatInputText.value : '').trim();
   const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
-  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || DEFAULT_API_HOST).trim();
+  const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || '').trim();
 
   if (!text) {
     showToast('Tulis atau ucapkan pesan terlebih dahulu.');
     return;
   }
 
-  if (!apiKey) {
-    showToast('Isi API Key dulu di Pengaturan.');
-    openSettingsModal();
-    return;
-  }
+  if (!ensureApiConfig(apiKey, apiHost)) return;
 
   const timestamp = Date.now();
 
@@ -735,7 +741,7 @@ async function handleSendChatMessage() {
     const selectedModel = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
     const result = await processChatConversation(chatMessages, apiKey, { 
       model: selectedModel,
-      endpoint: apiHost || DEFAULT_API_HOST
+      endpoint: apiHost
     });
 
     // 5. Sembunyikan Typing Indicator
@@ -1160,6 +1166,10 @@ function attachEventListeners() {
       const selectedProvider = ttsProviderSelect ? ttsProviderSelect.value : TTSProvider.BROWSER;
       const kokoroUrl = kokoroUrlInput ? kokoroUrlInput.value.trim() : '';
 
+      if (!apiHost) {
+        showToast('API Host wajib diisi (alamat server 9Router / API Anda).');
+        return;
+      }
       if (!apiKey) {
         showToast('API Key wajib diisi.');
         return;
@@ -1167,7 +1177,7 @@ function attachEventListeners() {
 
       // Save 9router Settings to localStorage
       localStorage.setItem('9router_api_key', apiKey);
-      localStorage.setItem('9router_api_host', apiHost || DEFAULT_API_HOST);
+      localStorage.setItem('9router_api_host', apiHost);
       if (modelSelect) localStorage.setItem('9router_model', selectedModel);
 
       if (sttProviderSelect) localStorage.setItem('verba_stt_provider', sttProviderSelect.value);
@@ -1191,7 +1201,7 @@ function attachEventListeners() {
   if (testConnectionBtn && testConnectionResult) {
     testConnectionBtn.addEventListener('click', async () => {
       const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
-      const endpoint = resolveChatEndpoint(apiHostInput ? apiHostInput.value : '');
+      const apiHost = apiHostInput ? apiHostInput.value.trim() : '';
       const model = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
 
       const report = (ok, message) => {
@@ -1200,10 +1210,15 @@ function attachEventListeners() {
         testConnectionResult.classList.add(...(ok === null ? ['bg-slate-50', 'text-slate-600'] : ok ? ['bg-emerald-50', 'text-emerald-700'] : ['bg-red-50', 'text-red-700']));
       };
 
+      if (!apiHost) {
+        report(false, 'API Host masih kosong. Isi alamat server 9Router / API Anda, mis. https://9router.domainanda.com');
+        return;
+      }
       if (!apiKey) {
         report(false, 'API Key masih kosong.');
         return;
       }
+      const endpoint = resolveChatEndpoint(apiHost);
       if (location.protocol === 'https:' && endpoint.startsWith('http:')) {
         report(false, `Host ${endpoint} memakai http://, browser memblokirnya karena aplikasi dibuka lewat https. Pakai host https://.`);
         return;
