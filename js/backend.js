@@ -74,6 +74,38 @@ export function resolveApiUrl(host, path) {
 }
 
 /**
+ * Ambil daftar model dari endpoint /v1/models (format OpenAI).
+ * @returns {Promise<string[]>} ID model, terurut
+ */
+export async function listModels(host, apiKey) {
+  const endpoint = resolveApiUrl(host, '/models');
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      headers: apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}
+    });
+  } catch (err) {
+    throw new Error(`Tidak bisa menghubungi ${endpoint}. Cek domain (harus https & bisa diakses dari HP) atau izin CORS server. (${err.message})`);
+  }
+
+  const body = await response.text();
+  if (!response.ok) {
+    const plain = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    throw new Error(`${endpoint} → HTTP ${response.status}${response.status === 401 || response.status === 403 ? ' (API Key salah/tidak diizinkan)' : response.status === 404 ? ' (bukan server API, cek host)' : ''}: ${plain.slice(0, 120)}`);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(body);
+  } catch (_) {
+    throw new Error(`${endpoint} tidak mengembalikan JSON. Host kemungkinan bukan server API.`);
+  }
+  const items = Array.isArray(data) ? data : (data.data || data.models || []);
+  const ids = items.map((m) => (typeof m === 'string' ? m : m.id || m.name)).filter(Boolean);
+  return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Mengirim permintaan terjemahan & koreksi tata bahasa ke API 9router
  * @param {string} indonesianInput - Teks bahasa Indonesia dari user
  * @param {string} apiKey - 9router API Key

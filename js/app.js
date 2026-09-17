@@ -9,7 +9,8 @@ import {
   TTSProvider,
   DEFAULT_STT_MODEL,
   transcribeAudio,
-  resolveChatEndpoint
+  resolveChatEndpoint,
+  listModels
 } from './backend.js?v=__BUILD__';
 
 // DOM Elements - View Containers
@@ -57,7 +58,10 @@ const apiKeyInput = document.getElementById('apiKeyInput');
 const toggleApiKeyVisibility = document.getElementById('toggleApiKeyVisibility');
 const apiHostInput = document.getElementById('apiHostInput');
 const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
-const modelSelect = document.getElementById('modelSelect');
+const modelSelect = document.getElementById('modelSelect'); // input teks, sumber nilai model
+const modelPicker = document.getElementById('modelPicker');
+const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+const modelStatus = document.getElementById('modelStatus');
 const ttsProviderSelect = document.getElementById('ttsProviderSelect');
 const kokoroUrlContainer = document.getElementById('kokoroUrlContainer');
 const kokoroUrlInput = document.getElementById('kokoroUrlInput');
@@ -130,7 +134,7 @@ function loadSettings() {
   const savedHost = localStorage.getItem('9router_api_host') || '';
   if (apiHostInput) apiHostInput.value = savedHost;
 
-  const savedModel = localStorage.getItem('9router_model') || 'deepseek/deepseek-chat';
+  const savedModel = localStorage.getItem('9router_model') || '';
   if (modelSelect) modelSelect.value = savedModel;
 
   // Load STT Config (Web Speech vs Server Whisper)
@@ -152,7 +156,7 @@ function loadSettings() {
 function persistSettings() {
   if (apiKeyInput) localStorage.setItem('9router_api_key', apiKeyInput.value.trim());
   if (apiHostInput) localStorage.setItem('9router_api_host', apiHostInput.value.trim());
-  if (modelSelect) localStorage.setItem('9router_model', modelSelect.value.trim() || 'deepseek/deepseek-chat');
+  if (modelSelect) localStorage.setItem('9router_model', modelSelect.value.trim());
 
   if (sttProviderSelect) localStorage.setItem('verba_stt_provider', sttProviderSelect.value);
   if (sttModelInput) localStorage.setItem('verba_stt_model', sttModelInput.value.trim() || DEFAULT_STT_MODEL);
@@ -162,6 +166,117 @@ function persistSettings() {
     provider: ttsProviderSelect ? ttsProviderSelect.value : TTSProvider.BROWSER,
     kokoroUrl: (kokoroUrlInput && kokoroUrlInput.value.trim()) || 'http://localhost:8880/v1/audio/speech'
   });
+}
+
+// ---------------------------------------------------------------------------
+// Pemilih model: daftar diambil dari {host}/v1/models
+// ---------------------------------------------------------------------------
+const OLD_DEFAULT_MODEL = 'deepseek/deepseek-chat';
+const MANUAL_MODEL = '__manual__';
+const NON_CHAT_MODEL = /whisper|transcri|tts|speech|embed|rerank|moderation|dall-e|image/i;
+let modelLoadSeq = 0;
+
+function setModelStatus(text, tone = 'muted') {
+  if (!modelStatus) return;
+  modelStatus.textContent = text;
+  modelStatus.classList.remove('text-slate-500', 'text-red-600', 'text-emerald-600');
+  modelStatus.classList.add(tone === 'error' ? 'text-red-600' : tone === 'ok' ? 'text-emerald-600' : 'text-slate-500');
+}
+
+function showManualModelInput(show) {
+  if (modelSelect) modelSelect.classList.toggle('hidden', !show);
+}
+
+function fillModelPicker(models, selected) {
+  if (!modelPicker) return;
+  modelPicker.innerHTML = '';
+
+  // Kelompokkan berdasarkan prefix provider 9Router, mis. "cc/", "gh/", "openrouter/"
+  const groups = new Map();
+  models.forEach((id) => {
+    const prefix = id.includes('/') ? id.split('/')[0] : 'Lainnya';
+    if (!groups.has(prefix)) groups.set(prefix, []);
+    groups.get(prefix).push(id);
+  });
+
+  groups.forEach((ids, prefix) => {
+    const group = document.createElement('optgroup');
+    group.label = prefix;
+    ids.forEach((id) => group.appendChild(new Option(id, id)));
+    modelPicker.appendChild(group);
+  });
+
+  modelPicker.appendChild(new Option('✏️ Ketik nama model manual...', MANUAL_MODEL));
+  modelPicker.value = selected;
+}
+
+async function loadModelOptions() {
+  if (!modelPicker) return;
+  const host = apiHostInput ? apiHostInput.value.trim() : '';
+  const key = apiKeyInput ? apiKeyInput.value.trim() : '';
+  const current = modelSelect ? modelSelect.value.trim() : '';
+
+  if (!host || !key) {
+    modelPicker.innerHTML = '';
+    modelPicker.appendChild(new Option(current ? `${current} (isi host & key untuk memuat daftar)` : 'Isi API Host & API Key dulu', current));
+    showManualModelInput(false);
+    setModelStatus('Daftar model diambil otomatis dari server setelah host & API key diisi.');
+    return;
+  }
+
+  const seq = ++modelLoadSeq;
+  setModelStatus('⏳ Memuat daftar model dari server...');
+  if (refreshModelsBtn) refreshModelsBtn.disabled = true;
+
+  try {
+    const models = await listModels(host, key);
+    if (seq !== modelLoadSeq) return;
+
+    if (models.length === 0) throw new Error('Server tidak mengembalikan model apa pun.');
+
+    const chatModels = models.filter((id) => !NON_CHAT_MODEL.test(id));
+    const pickable = chatModels.length ? chatModels : models;
+    let selected = current;
+    let note = '';
+
+    if (!pickable.includes(current)) {
+      if (!current || current === OLD_DEFAULT_MODEL) {
+        selected = pickable[0];
+        note = ` Model otomatis dipilih: ${selected}.`;
+      } else {
+        selected = MANUAL_MODEL;
+        note = ` ⚠️ Model "${current}" tidak ada di daftar server.`;
+      }
+    }
+
+    fillModelPicker(pickable, selected);
+    if (selected !== MANUAL_MODEL && modelSelect) {
+      modelSelect.value = selected;
+      persistSettings();
+    }
+    showManualModelInput(selected === MANUAL_MODEL);
+    setModelStatus(`✅ ${pickable.length} model tersedia.${note}`, note.includes('⚠️') ? 'error' : 'ok');
+
+    // Isi saran model Whisper untuk pengenalan suara
+    const sttModels = models.filter((id) => /whisper|transcri/i.test(id));
+    let sttList = document.getElementById('sttModelOptions');
+    if (!sttList && sttModelInput) {
+      sttList = document.createElement('datalist');
+      sttList.id = 'sttModelOptions';
+      sttModelInput.after(sttList);
+      sttModelInput.setAttribute('list', 'sttModelOptions');
+    }
+    if (sttList) sttList.innerHTML = sttModels.map((id) => `<option value="${id}"></option>`).join('');
+  } catch (err) {
+    if (seq !== modelLoadSeq) return;
+    console.error('Gagal memuat model:', err);
+    modelPicker.innerHTML = '';
+    modelPicker.appendChild(new Option('Gagal memuat daftar — ketik manual', MANUAL_MODEL));
+    showManualModelInput(true);
+    setModelStatus(`❌ ${err.message}`, 'error');
+  } finally {
+    if (seq === modelLoadSeq && refreshModelsBtn) refreshModelsBtn.disabled = false;
+  }
 }
 
 // Toggle visibility input URL Kokoro Homelab berdasarkan provider TTS yang dipilih
@@ -237,6 +352,11 @@ function ensureApiConfig(apiKey, apiHost) {
   }
   if (!apiKey) {
     showToast('Isi API Key dulu di Pengaturan.');
+    openSettingsModal();
+    return false;
+  }
+  if (!modelSelect || !modelSelect.value.trim()) {
+    showToast('Pilih model AI dulu di Pengaturan.');
     openSettingsModal();
     return false;
   }
@@ -445,7 +565,7 @@ async function handleTranslate(inputOverride) {
   const text = (inputOverride || textInput.value).trim();
   const apiKey = (apiKeyInput ? apiKeyInput.value : localStorage.getItem('9router_api_key') || '').trim();
   const apiHost = (apiHostInput ? apiHostInput.value : localStorage.getItem('9router_api_host') || '').trim();
-  const selectedModel = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
+  const selectedModel = (modelSelect && modelSelect.value.trim()) || '';
 
   if (!text) {
     showToast('Masukkan kalimat Bahasa Indonesia terlebih dahulu.');
@@ -755,7 +875,7 @@ async function handleSendChatMessage() {
 
   try {
     // 4. Panggil Backend processChatConversation dari backend.js
-    const selectedModel = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
+    const selectedModel = (modelSelect && modelSelect.value.trim()) || '';
     const result = await processChatConversation(chatMessages, apiKey, { 
       model: selectedModel,
       endpoint: apiHost
@@ -959,6 +1079,7 @@ function closeHistoryDrawer() {
 function openSettingsModal() {
   if (!settingsModal || !settingsModalContent) return;
   loadSettings();
+  loadModelOptions();
   settingsModal.classList.remove('opacity-0', 'pointer-events-none');
   settingsModalContent.classList.remove('scale-95');
   settingsModalContent.classList.add('scale-100');
@@ -1184,6 +1305,30 @@ function attachEventListeners() {
     if (el) el.addEventListener('change', persistSettings);
   });
 
+  // Muat ulang daftar model saat host/key berubah (dengan jeda) atau tombol ditekan
+  let modelReloadTimer = null;
+  [apiHostInput, apiKeyInput].forEach((el) => {
+    if (!el) return;
+    el.addEventListener('input', () => {
+      clearTimeout(modelReloadTimer);
+      modelReloadTimer = setTimeout(loadModelOptions, 900);
+    });
+  });
+  if (refreshModelsBtn) refreshModelsBtn.addEventListener('click', loadModelOptions);
+  if (modelPicker) {
+    modelPicker.addEventListener('change', () => {
+      if (modelPicker.value === MANUAL_MODEL) {
+        showManualModelInput(true);
+        if (modelSelect) modelSelect.focus();
+        return;
+      }
+      showManualModelInput(false);
+      if (modelSelect) modelSelect.value = modelPicker.value;
+      persistSettings();
+      setModelStatus(`✅ Model dipilih: ${modelPicker.value}`, 'ok');
+    });
+  }
+
   // Simpan Pengaturan (9router API Key + Host Endpoint + LLM Model + Provider TTS)
   if (saveApiKeyBtn) {
     saveApiKeyBtn.addEventListener('click', () => {
@@ -1210,7 +1355,7 @@ function attachEventListeners() {
     testConnectionBtn.addEventListener('click', async () => {
       const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
       const apiHost = apiHostInput ? apiHostInput.value.trim() : '';
-      const model = (modelSelect && modelSelect.value.trim()) || 'deepseek/deepseek-chat';
+      const model = (modelSelect && modelSelect.value.trim()) || '';
 
       const report = (ok, message) => {
         testConnectionResult.textContent = message;
@@ -1224,6 +1369,10 @@ function attachEventListeners() {
       }
       if (!apiKey) {
         report(false, 'API Key masih kosong.');
+        return;
+      }
+      if (!model) {
+        report(false, 'Model belum dipilih. Tekan "🔄 Muat model" lalu pilih salah satu.');
         return;
       }
       const endpoint = resolveChatEndpoint(apiHost);
