@@ -51,8 +51,18 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # stderr sengaja tidak dibuang: kalau server tidak terjangkau, pesan
+          # ssh-keyscan adalah satu-satunya petunjuk penyebabnya.
+          ssh-keyscan -p "$SERVER_PORT" -H "$SERVER_HOST" > ~/.ssh/known_hosts || true
+          if [[ ! -s ~/.ssh/known_hosts ]]; then
+            echo "Server tidak mengembalikan host key SSH." >&2
+            echo "Periksa SERVER_HOST dan SERVER_PORT, lalu pastikan port SSH itu" >&2
+            echo "bisa dijangkau dari internet. Homelab di balik Cloudflare Tunnel" >&2
+            echo "umumnya tidak membuka SSH ke publik." >&2
+            exit 1
+          fi
           chmod 600 ~/.ssh/known_hosts
+          echo "Host key diterima: $(wc -l < ~/.ssh/known_hosts) baris"
 
       - name: Deploy
         env:
