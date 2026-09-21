@@ -1,33 +1,101 @@
-name: "Deploy Verba AI (Release Branch)"
+# Deploy otomatis ke server saat ada push ke branch release.
+#
+# Butuh repository secrets: SERVER_HOST, SERVER_PORT, SERVER_USER, SERVER_SSH_KEY.
+# Path repo di server bisa diatur lewat repository variable DEPLOY_PATH
+# (default: /home/fanz/Projects/studiolab/verba-pwa).
+
+name: Deploy
 
 on:
   push:
-    branches:
-      - release # 👈 Hanya berjalan saat ada push/merge ke branch 'release'
+    branches: [release]
+  workflow_dispatch:
+
+# Satu deploy dalam satu waktu. Deploy tidak dibatalkan di tengah jalan supaya
+# stack docker di server tidak ditinggal dalam keadaan setengah jadi.
+concurrency:
+  group: deploy-release
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    name: "Pull & Rebuild Release on Server"
+    name: Build & restart stack di server
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - name: SSH and Deploy to Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT }}
-          script: |
-            # 1. Masuk ke folder proyek verba-ai di server
-            cd /home/fanz/Projects/studiolab/verba-pwa
+      - name: Periksa secrets wajib
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          missing=()
+          [[ -n "$SERVER_HOST" ]]    || missing+=(SERVER_HOST)
+          [[ -n "$SERVER_PORT" ]]    || missing+=(SERVER_PORT)
+          [[ -n "$SERVER_USER" ]]    || missing+=(SERVER_USER)
+          [[ -n "$SERVER_SSH_KEY" ]] || missing+=(SERVER_SSH_KEY)
+          if (( ${#missing[@]} )); then
+            echo "Secret berikut belum diisi: ${missing[*]}" >&2
+            exit 1
+          fi
 
-            # 2. Pastikan berada di branch release & pull kodingan terbaru
-            git checkout release
-            git pull origin release
+      - name: Siapkan kunci SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 600 ~/.ssh/known_hosts
 
-            # 3. Build ulang Docker (otomatis jalankan yarn build di dalam Docker)
-            docker compose up -d --build
+      - name: Deploy
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/home/fanz/Projects/studiolab/verba-pwa' }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -p "$SERVER_PORT" \
+              -o BatchMode=yes \
+              -o ServerAliveInterval=30 \
+              "$SERVER_USER@$SERVER_HOST" \
+              bash -euo pipefail -s -- "$DEPLOY_PATH" "$GITHUB_SHA" <<'REMOTE'
+          deploy_path="$1"
+          sha="$2"
 
-            # 4. Bersihkan image Docker lama yang tidak terpakai (Hemat Disk)
-            docker image prune -f
+          # `~` tidak diekspansi saat path datang dari variabel, jadi lakukan manual.
+          case "$deploy_path" in
+            "~")   deploy_path="$HOME" ;;
+            "~/"*) deploy_path="$HOME/${deploy_path#\~/}" ;;
+          esac
+
+          if [[ ! -d "$deploy_path/.git" ]]; then
+            echo "Tidak ada repo git di $deploy_path" >&2
+            exit 1
+          fi
+          cd "$deploy_path"
+
+          echo "==> sync ke $sha"
+          git fetch --prune origin release
+          # Reset ke SHA persis yang memicu workflow, bukan ke origin/release,
+          # supaya push beruntun tidak saling mendahului.
+          # -f wajib: tanpa itu checkout batal kalau ada file terlacak yang
+          # pernah diedit manual di server. File untracked tidak ikut terhapus.
+          git checkout -f -B release "$sha"
+          # Sengaja tanpa `git clean`: deploy/cloudflared/credentials.json tidak
+          # dilacak git dan akan terhapus kalau working tree dibersihkan.
+
+          echo "==> deploy.sh"
+          ./deploy.sh
+          REMOTE
+
+      - name: Hapus kunci SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts
