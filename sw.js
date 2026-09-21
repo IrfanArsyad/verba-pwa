@@ -1,5 +1,7 @@
 // __BUILD__ diganti ID build unik oleh Dockerfile, jadi cache lama selalu dibersihkan.
 const CACHE_NAME = 'verba-ai-pwa-__BUILD__';
+const IS_DEV = '__BUILD__' === 'dev' || self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
+
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -13,6 +15,10 @@ const ASSETS_TO_CACHE = [
 
 // Install Event - Cache Static Assets
 self.addEventListener('install', (event) => {
+  if (IS_DEV) {
+    self.skipWaiting();
+    return;
+  }
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(ASSETS_TO_CACHE))
@@ -25,7 +31,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => Promise.all(
-        cacheNames.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
+        cacheNames.filter((name) => IS_DEV || name !== CACHE_NAME).map((name) => caches.delete(name))
       ))
       .then(() => self.clients.claim())
   );
@@ -39,6 +45,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  // Mode Dev (localhost/127.0.0.1/__BUILD__=dev): Bypass cache sepenuhnya agar edit di editor langsung berlaku
+  if (IS_DEV) {
+    event.respondWith(
+      fetch(request).catch(() => caches.match(request))
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(request)

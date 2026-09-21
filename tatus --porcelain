@@ -1,0 +1,9 @@
+[1mdiff --git a/Dockerfile b/Dockerfile[m
+[1mold mode 100644[m
+[1mnew mode 100755[m
+[1mdiff --git a/deploy/nginx/default.conf b/deploy/nginx/default.conf[m
+[1mold mode 100644[m
+[1mnew mode 100755[m
+[1mdiff --git a/docker-compose.yml b/docker-compose.yml[m
+[1mold mode 100644[m
+[1mnew mode 100755[m

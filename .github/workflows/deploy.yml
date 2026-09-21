@@ -1,0 +1,33 @@
+name: "Deploy Verba AI (Release Branch)"
+
+on:
+  push:
+    branches:
+      - release # 👈 Hanya berjalan saat ada push/merge ke branch 'release'
+
+jobs:
+  deploy:
+    name: "Pull & Rebuild Release on Server"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH and Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            # 1. Masuk ke folder proyek verba-ai di server
+            cd /home/fanz/Projects/studiolab/verba-pwa
+
+            # 2. Pastikan berada di branch release & pull kodingan terbaru
+            git checkout release
+            git pull origin release
+
+            # 3. Build ulang Docker (otomatis jalankan yarn build di dalam Docker)
+            docker compose up -d --build
+
+            # 4. Bersihkan image Docker lama yang tidak terpakai (Hemat Disk)
+            docker image prune -f

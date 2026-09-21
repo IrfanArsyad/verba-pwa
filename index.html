@@ -577,91 +577,107 @@
 
   </nav>
 
-  <!-- Settings Sheet -->
-  <div id="settingsModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-300 opacity-0 pointer-events-none">
-    <div id="settingsModalContent" class="w-full max-w-lg max-h-[94dvh] flex flex-col bg-[#F4F6FA] rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300">
+  <!-- Settings Sheet (Native Mobile Bottom Sheet on Mobile / Modern Modal on Desktop) -->
+  <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-300 opacity-0 pointer-events-none">
+    <div id="settingsModalContent" class="w-full max-w-lg max-h-[92dvh] flex flex-col bg-[#F8FAFC] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden transform translate-y-full sm:translate-y-0 sm:scale-95 transition-all duration-300 ease-out border-t sm:border border-white/40">
 
-      <!-- Header -->
-      <div class="relative bg-gradient-to-br from-indigo-700 via-blue-600 to-cyan-500 text-white px-5 pt-3 pb-5 shrink-0">
-        <div class="mx-auto mb-3 h-1.5 w-10 rounded-full bg-white/40 sm:hidden"></div>
-        <div class="flex items-start justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <div class="w-11 h-11 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center text-xl">⚙️</div>
+      <!-- Mobile Drag Handle Header -->
+      <div class="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 text-white px-6 pt-3 pb-5 shrink-0 shadow-md">
+        <div class="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/30 sm:hidden"></div>
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-2xl shadow-inner">⚡</div>
             <div>
-              <h3 class="text-lg font-extrabold leading-tight">Pengaturan</h3>
-              <p class="text-xs text-white/80">AI, suara, dan aplikasi</p>
+              <h3 class="text-xl font-black tracking-tight leading-tight">Pengaturan</h3>
+              <p class="text-xs text-blue-200/90 font-medium">Gemini, 9Router, Suara, &amp; PWA</p>
             </div>
           </div>
-          <button id="closeSettingsBtn" class="w-10 h-10 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/20 flex items-center justify-center transition active:scale-95" title="Tutup">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+          <button id="closeSettingsBtn" class="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 flex items-center justify-center transition active:scale-90" title="Tutup">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
       </div>
 
-      <!-- Body -->
-      <div class="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4">
+      <!-- Body Container -->
+      <div class="flex-1 overflow-y-auto overscroll-contain px-5 py-5 space-y-5">
 
-        <!-- Card: AI Chat -->
-        <section class="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 space-y-4">
+        <!-- Card: Provider AI Chat -->
+        <section class="bg-white rounded-[2rem] border border-slate-200/80 shadow-sm p-5 space-y-4">
           <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">🤖</div>
+            <div class="flex items-center gap-3.5">
+              <div class="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center text-xl shadow-sm">🤖</div>
               <div>
-                <h4 class="text-sm font-extrabold text-slate-900">AI Chat &amp; Terjemahan</h4>
-                <p class="text-[11px] text-slate-500">9Router / API kompatibel OpenAI</p>
+                <h4 class="text-base font-extrabold text-slate-900 leading-snug">AI Chat &amp; Terjemahan</h4>
+                <p class="text-xs text-slate-500 font-medium">Google Gemini / 9Router / OpenAI API</p>
               </div>
             </div>
-            <span id="aiStatusPill" class="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">Belum diatur</span>
+            <span id="aiStatusPill" class="shrink-0 text-[11px] font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">Belum diatur</span>
+          </div>
+
+          <!-- Provider Select -->
+          <div>
+            <label for="apiProviderSelect" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Pilih Provider AI</label>
+            <div class="relative">
+              <select id="apiProviderSelect" class="w-full bg-slate-50/80 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-900 shadow-sm focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px] appearance-none pr-10">
+                <option value="gemini">✨ Google Gemini API (Gratis &amp; Cepat)</option>
+                <option value="9router">🚀 9router AI Gateway</option>
+                <option value="custom">⚙️ Custom OpenAI-Compatible API</option>
+              </select>
+              <svg class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+            </div>
           </div>
 
           <div>
-            <label for="apiHostInput" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">API Host</label>
-            <input type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="apiHostInput" placeholder="https://9router.domainanda.com" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
-            <p class="mt-1.5 text-[11px] text-slate-400">Cukup domain, <code>/v1</code> ditambahkan otomatis. Wajib https.</p>
+            <label for="apiHostInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">API Host Endpoint</label>
+            <input type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="apiHostInput" placeholder="https://generativelanguage.googleapis.com/v1beta/openai" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
+            <p class="mt-1.5 text-[11px] text-slate-400">Endpoint API. Wajib https://</p>
           </div>
 
           <div>
-            <label for="apiKeyInput" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">API Key</label>
+            <div class="flex items-center justify-between mb-1.5">
+              <label id="apiKeyLabel" for="apiKeyInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Google Gemini API Key</label>
+              <a id="getApiKeyLink" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="text-[11px] font-bold text-blue-600 hover:underline">Dapatkan API Key Gratis ↗</a>
+            </div>
             <div class="relative flex items-center">
-              <input type="password" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" id="apiKeyInput" placeholder="sk-..." class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px] pr-12">
+              <input type="password" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" id="apiKeyInput" placeholder="AIzaSy..." class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px] pr-12">
               <button type="button" id="toggleApiKeyVisibility" data-toggle-password="apiKeyInput" class="absolute right-1.5 w-10 h-10 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition" title="Lihat API Key"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
             </div>
           </div>
 
           <div>
             <div class="flex items-center justify-between mb-1.5">
-              <label for="modelPicker" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5 mb-0">Model</label>
-              <button type="button" id="refreshModelsBtn" class="text-[11px] font-bold text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-100 transition disabled:opacity-50">↻ Muat ulang</button>
+              <label for="modelPicker" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Pilihan Model LLM</label>
+              <button type="button" id="refreshModelsBtn" class="text-[11px] font-bold text-blue-600 hover:text-blue-700 px-3 py-1 rounded-full bg-blue-50 hover:bg-blue-100 transition active:scale-95 disabled:opacity-50">↻ Muat ulang</button>
             </div>
             <div class="relative">
-              <select id="modelPicker" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px] appearance-none pr-10">
-                <option value="">Isi API Host &amp; API Key dulu</option>
+              <select id="modelPicker" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 text-sm text-slate-900 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px] appearance-none pr-10 font-medium">
+                <option value="">Pilih model yang tersedia</option>
               </select>
               <svg class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
             </div>
-            <input type="text" autocapitalize="off" autocorrect="off" spellcheck="false" id="modelSelect" placeholder="Ketik nama model, mis. cc/claude-sonnet-4" class="hidden mt-2 w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
-            <p id="modelStatus" class="mt-1.5 text-[11px] text-slate-500 break-words">Daftar model diambil otomatis dari server.</p>
+            <input type="text" autocapitalize="off" autocorrect="off" spellcheck="false" id="modelSelect" placeholder="Ketik nama model manual..." class="hidden mt-2.5 w-full bg-white border border-slate-200 rounded-2xl px-4 py-3.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
+            <p id="modelStatus" class="mt-2 text-[11px] text-slate-500 leading-relaxed break-words">Daftar model diambil dari server.</p>
           </div>
 
-          <button id="testConnectionBtn" type="button" class="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold transition active:scale-[0.98] min-h-[48px] disabled:opacity-60">🔌 Tes Koneksi AI</button>
-          <p id="testConnectionResult" class="hidden text-[11px] leading-relaxed rounded-2xl px-3 py-2.5 break-words"></p>
+          <button id="testConnectionBtn" type="button" class="w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold transition active:scale-[0.98] min-h-[48px] disabled:opacity-60 shadow-md">🔌 Tes Koneksi AI</button>
+          <p id="testConnectionResult" class="hidden text-[11px] leading-relaxed rounded-2xl px-3.5 py-3 break-words font-medium"></p>
         </section>
 
         <!-- Card: Voice -->
-        <section class="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 space-y-4">
+        <section class="bg-white rounded-[2rem] border border-slate-200/80 shadow-sm p-5 space-y-4">
           <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg">🎙️</div>
+            <div class="flex items-center gap-3.5">
+              <div class="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center text-xl shadow-sm">🎙️</div>
               <div>
-                <h4 class="text-sm font-extrabold text-slate-900">Suara</h4>
-                <p class="text-[11px] text-slate-500">Mikrofon &amp; pembacaan jawaban</p>
+                <h4 class="text-base font-extrabold text-slate-900 leading-snug">Suara &amp; Pengucapan</h4>
+                <p class="text-xs text-slate-500 font-medium">Mikrofon &amp; pembacaan jawaban</p>
               </div>
             </div>
-            <span id="voiceStatusPill" class="shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500">Keyboard</span>
+            <span id="voiceStatusPill" class="shrink-0 text-[11px] font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">Keyboard</span>
           </div>
 
           <div>
-            <span class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Mikrofon</span>
+            <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Mikrofon (STT)</span>
             <select id="sttProviderSelect" class="hidden" data-segmented>
               <option value="auto" data-desc="Pilih cara terbaik">✨ Otomatis</option>
               <option value="server" data-desc="Groq / OpenAI">☁️ Server</option>
@@ -672,7 +688,7 @@
           </div>
 
           <div>
-            <span class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Bacakan Jawaban</span>
+            <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Bacakan Jawaban (TTS)</span>
             <select id="ttsProviderSelect" class="hidden" data-segmented>
               <option value="browser" data-desc="Suara HP">📱 Bawaan</option>
               <option value="server" data-desc="Groq / OpenAI">☁️ Server</option>
@@ -682,37 +698,37 @@
           </div>
 
           <!-- Server suara (dipakai mikrofon & pembacaan) -->
-          <div class="rounded-2xl bg-slate-50 border border-slate-200/80 p-3.5 space-y-3">
+          <div class="rounded-2xl bg-slate-50/80 border border-slate-200/80 p-4 space-y-3">
             <div class="flex items-center justify-between">
-              <p class="text-xs font-extrabold text-slate-800">☁️ Server Suara</p>
-              <a href="https://console.groq.com/keys" target="_blank" rel="noopener" class="text-[11px] font-bold text-blue-600">Buat key Groq ↗</a>
+              <p class="text-xs font-extrabold text-slate-800">☁️ Server Suara Groq/OpenAI</p>
+              <a href="https://console.groq.com/keys" target="_blank" rel="noopener" class="text-[11px] font-bold text-blue-600 hover:underline">Buat key Groq ↗</a>
             </div>
             <div>
-              <label for="sttHostInput" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Host</label>
-              <input type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="sttHostInput" placeholder="https://api.groq.com/openai" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
+              <label for="sttHostInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Host</label>
+              <input type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="sttHostInput" placeholder="https://api.groq.com/openai" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
             </div>
             <div>
-              <label for="sttKeyInput" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">API Key</label>
+              <label for="sttKeyInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">API Key</label>
               <div class="relative flex items-center">
-                <input type="password" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" id="sttKeyInput" placeholder="gsk_..." class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px] pr-12">
+                <input type="password" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" id="sttKeyInput" placeholder="gsk_..." class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px] pr-12">
                 <button type="button" data-toggle-password="sttKeyInput" class="absolute right-1.5 w-10 h-10 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition" title="Lihat API Key"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></button>
               </div>
             </div>
             <div class="grid grid-cols-1 gap-3">
               <div>
-                <label for="sttModelInput" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Model mikrofon</label>
-                <input type="text" list="sttModelOptions" autocapitalize="off" autocorrect="off" spellcheck="false" id="sttModelInput" placeholder="Otomatis (whisper-large-v3)" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
+                <label for="sttModelInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Model mikrofon</label>
+                <input type="text" list="sttModelOptions" autocapitalize="off" autocorrect="off" spellcheck="false" id="sttModelInput" placeholder="Otomatis (whisper-large-v3)" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
                 <datalist id="sttModelOptions"></datalist>
               </div>
               <div id="ttsServerContainer" class="hidden grid grid-cols-2 gap-2">
                 <div>
-                  <label for="ttsModelInput" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Model suara</label>
-                  <input type="text" list="ttsModelOptions" autocapitalize="off" autocorrect="off" spellcheck="false" id="ttsModelInput" placeholder="Otomatis" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
+                  <label for="ttsModelInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Model suara</label>
+                  <input type="text" list="ttsModelOptions" autocapitalize="off" autocorrect="off" spellcheck="false" id="ttsModelInput" placeholder="Otomatis" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
                   <datalist id="ttsModelOptions"></datalist>
                 </div>
                 <div>
-                  <label for="ttsVoiceInput" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Jenis suara</label>
-                  <input type="text" list="ttsVoiceOptions" autocapitalize="off" autocorrect="off" spellcheck="false" id="ttsVoiceInput" placeholder="Otomatis" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
+                  <label for="ttsVoiceInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Jenis suara</label>
+                  <input type="text" list="ttsVoiceOptions" autocapitalize="off" autocorrect="off" spellcheck="false" id="ttsVoiceInput" placeholder="Otomatis" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
                   <datalist id="ttsVoiceOptions">
                     <option value="hannah"></option><option value="diana"></option><option value="autumn"></option>
                     <option value="austin"></option><option value="daniel"></option><option value="troy"></option>
@@ -725,34 +741,34 @@
           </div>
 
           <div id="kokoroUrlContainer" class="hidden">
-            <label for="kokoroUrlInput" class="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1.5">Kokoro URL</label>
-            <input type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="kokoroUrlInput" placeholder="https://verba.studiolab.id/kokoro/v1/audio/speech" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-[15px] text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.02] focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
+            <label for="kokoroUrlInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Kokoro URL</label>
+            <input type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="kokoroUrlInput" placeholder="https://verba.studiolab.id/kokoro/v1/audio/speech" class="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 transition min-h-[48px]">
           </div>
 
-          <button id="testVoiceBtn" type="button" class="w-full py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-sm font-bold transition active:scale-[0.98] min-h-[48px]">🔊 Tes Suara</button>
-          <p class="text-[11px] text-slate-400 leading-relaxed">Tidak ada suara? Matikan mode senyap iPhone (tombol di samping HP) dan naikkan volume.</p>
+          <button id="testVoiceBtn" type="button" class="w-full py-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 text-sm font-bold transition active:scale-[0.98] min-h-[48px]">🔊 Tes Suara</button>
+          <p class="text-[11px] text-slate-400 leading-relaxed">Tidak ada suara? Matikan mode senyap iPhone dan naikkan volume.</p>
         </section>
 
-        <!-- Card: Install -->
-        <section class="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 space-y-3">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">📲</div>
+        <!-- Card: Install PWA -->
+        <section class="bg-white rounded-[2rem] border border-slate-200/80 shadow-sm p-5 space-y-3">
+          <div class="flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center text-xl shadow-sm">📲</div>
             <div>
-              <h4 class="text-sm font-extrabold text-slate-900">Pasang Aplikasi</h4>
-              <p class="text-[11px] text-slate-500">Buka VerbaAI langsung dari layar utama</p>
+              <h4 class="text-base font-extrabold text-slate-900 leading-snug">Pasang Aplikasi (PWA)</h4>
+              <p class="text-xs text-slate-500 font-medium">Buka VerbaAI langsung dari layar utama HP</p>
             </div>
           </div>
-          <button id="installAppBtn" type="button" class="hidden w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition active:scale-[0.98] min-h-[48px]">Install VerbaAI</button>
-          <p id="installHint" class="text-[11px] text-slate-500 leading-relaxed"></p>
+          <button id="installAppBtn" type="button" class="hidden w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-sm font-bold transition active:scale-[0.98] min-h-[48px] shadow-md shadow-emerald-500/20">Install VerbaAI</button>
+          <p id="installHint" class="text-[11px] text-slate-500 leading-relaxed font-medium"></p>
         </section>
       </div>
 
       <!-- Footer -->
-      <div class="shrink-0 bg-white/90 backdrop-blur border-t border-slate-200 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <button id="saveApiKeyBtn" class="w-full py-3.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-2xl text-sm font-extrabold transition shadow-lg shadow-blue-600/25 active:scale-[0.98] min-h-[52px]">
-          Selesai
+      <div class="shrink-0 bg-white/95 backdrop-blur border-t border-slate-200/80 px-5 pt-3.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <button id="saveApiKeyBtn" class="w-full py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white rounded-2xl text-sm font-black tracking-wide transition shadow-lg shadow-blue-600/30 active:scale-[0.98] min-h-[52px]">
+          Selesai &amp; Simpan
         </button>
-        <p class="mt-1.5 text-center text-[10px] text-slate-400">Perubahan tersimpan otomatis</p>
+        <p class="mt-2 text-center text-[11px] text-slate-400 font-medium">Perubahan tersimpan otomatis</p>
       </div>
     </div>
   </div>
@@ -772,8 +788,6 @@
           </button>
         </div>
       </div>
-      <div class="flex-1 overflow-y-auto overscroll-contain px-5 py-4 space-y-5">
-        <div>
           <div class="flex items-center justify-between mb-2">
             <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Bahasa saya</p>
             <button id="swapLangBtn" type="button" class="text-[12px] font-bold text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-100 transition">⇄ Tukar</button>
@@ -839,11 +853,24 @@
         if (!el) {
           el = document.createElement('div');
           el.id = 'fatalErrorBanner';
-          el.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:9999;background:#b91c1c;color:#fff;font:12px/1.4 system-ui,sans-serif;padding:10px 12px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);word-break:break-word';
-          el.onclick = function () { el.remove(); };
+          el.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:9999;background:#b91c1c;color:#fff;font:12px/1.4 system-ui,sans-serif;padding:10px 12px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);word-break:break-word;cursor:pointer';
+          el.onclick = function () { 
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                regs.forEach(function(r) { r.unregister(); });
+              });
+            }
+            if ('caches' in window) {
+              caches.keys().then(function(names) {
+                names.forEach(function(n) { caches.delete(n); });
+              });
+            }
+            el.remove();
+            setTimeout(function() { window.location.reload(true); }, 200);
+          };
           document.body.appendChild(el);
         }
-        el.textContent = '⚠️ Error aplikasi (versi __BUILD__): ' + msg + ' — ketuk untuk tutup';
+        el.textContent = '⚠️ Error aplikasi (versi __BUILD__): ' + msg + ' — ketuk banner ini untuk Bersihkan Cache & Reload';
       }
       window.addEventListener('error', function (e) {
         if (e.target && e.target.tagName === 'SCRIPT') {

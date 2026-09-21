@@ -11,6 +11,7 @@ import {
   transcribeAudio,
   resolveChatEndpoint,
   listModels,
+  getApiHeaders,
   unlockAudioPlayback,
   LANGUAGES,
   getLanguage,
@@ -64,6 +65,8 @@ const openSettingsBtn = document.getElementById('openSettingsBtn');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const settingsModal = document.getElementById('settingsModal');
 const settingsModalContent = document.getElementById('settingsModalContent');
+const apiProviderSelect = document.getElementById('apiProviderSelect');
+const apiKeyLabel = document.getElementById('apiKeyLabel');
 const apiKeyInput = document.getElementById('apiKeyInput');
 const apiHostInput = document.getElementById('apiHostInput');
 const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
@@ -146,21 +149,82 @@ document.addEventListener('DOMContentLoaded', () => {
   attachEventListeners();
 });
 
+const PROVIDER_MODELS = {
+  gemini: [
+    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Gratis & Cepat)' },
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }
+  ],
+  '9router': [
+    { value: 'deepseek/deepseek-chat', label: 'DeepSeek Chat' },
+    { value: 'openai/gpt-4o', label: 'GPT-4o' },
+    { value: 'anthropic/claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' }
+  ]
+};
+
+function updateProviderUI(provider, selectedModelValue = '') {
+  if (!apiProviderSelect) return;
+  apiProviderSelect.value = provider;
+
+  const getApiKeyLink = document.getElementById('getApiKeyLink');
+
+  if (provider === 'gemini') {
+    if (apiKeyLabel) apiKeyLabel.textContent = 'Google Gemini API Key';
+    if (apiKeyInput) apiKeyInput.placeholder = 'AIzaSy...';
+    if (apiHostInput) apiHostInput.value = 'https://generativelanguage.googleapis.com/v1beta/openai';
+    if (getApiKeyLink) {
+      getApiKeyLink.textContent = 'Dapatkan Gemini Key Gratis ↗';
+      getApiKeyLink.href = 'https://aistudio.google.com/app/apikey';
+    }
+  } else if (provider === '9router') {
+    if (apiKeyLabel) apiKeyLabel.textContent = '9router API Key';
+    if (apiKeyInput) apiKeyInput.placeholder = 'sk-9router-...';
+    if (apiHostInput) apiHostInput.value = 'https://api.9router.com/v1/chat/completions';
+    if (getApiKeyLink) {
+      getApiKeyLink.textContent = 'Buka 9router ↗';
+      getApiKeyLink.href = 'https://9router.com';
+    }
+  } else {
+    if (apiKeyLabel) apiKeyLabel.textContent = 'Custom API Key';
+    if (apiKeyInput) apiKeyInput.placeholder = 'sk-...';
+    if (getApiKeyLink) {
+      getApiKeyLink.textContent = '';
+    }
+  }
+
+  const modelTarget = selectedModelValue || (modelSelect ? modelSelect.value : '') || (PROVIDER_MODELS[provider] ? PROVIDER_MODELS[provider][0].value : 'gemini-1.5-flash');
+  if (modelSelect) modelSelect.value = modelTarget;
+
+  if (modelPicker && PROVIDER_MODELS[provider] && PROVIDER_MODELS[provider].length > 0) {
+    modelPicker.innerHTML = PROVIDER_MODELS[provider]
+      .map(m => `<option value="${m.value}">${m.label}</option>`)
+      .join('');
+    modelPicker.value = modelTarget;
+  }
+}
+
 // Load Saved API Key & Settings
 function loadSettings() {
-  // Load 9router LLM Settings
+  // Load LLM Settings
+  const savedProvider = localStorage.getItem('verba_ai_provider') || 'gemini';
   const savedKey = localStorage.getItem('9router_api_key') || '';
   if (savedKey && apiKeyInput) apiKeyInput.value = savedKey;
 
-  // Default lama (api.9router.com hanya website, bukan API) dibuang sekali.
-  if (localStorage.getItem('9router_api_host') === 'https://api.9router.com/v1/chat/completions') {
+  // Clean old invalid hosts
+  const storedHost = localStorage.getItem('9router_api_host') || '';
+  if (storedHost === 'https://api.9router.com/v1/chat/completions' || (savedProvider === 'gemini' && storedHost && !storedHost.endsWith('/openai'))) {
     localStorage.removeItem('9router_api_host');
   }
-  const savedHost = localStorage.getItem('9router_api_host') || '';
-  if (apiHostInput) apiHostInput.value = savedHost;
 
-  const savedModel = localStorage.getItem('9router_model') || '';
-  if (modelSelect) modelSelect.value = savedModel;
+  let savedModel = localStorage.getItem('9router_model');
+  if (!savedModel || savedModel.includes('gemini-2.0')) {
+    savedModel = savedProvider === 'gemini' ? 'gemini-1.5-flash' : 'deepseek/deepseek-chat';
+  }
+  if (apiProviderSelect) updateProviderUI(savedProvider, savedModel);
+  else if (modelSelect) modelSelect.value = savedModel;
+
+  const savedHost = localStorage.getItem('9router_api_host') || (savedProvider === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta/openai' : '');
+  if (apiHostInput) apiHostInput.value = savedHost;
 
   // Load STT Config (Web Speech vs Server Whisper)
   if (sttProviderSelect) sttProviderSelect.value = localStorage.getItem('verba_stt_provider') || 'auto';
@@ -305,6 +369,7 @@ function initLanguagePicker() {
 
 // Simpan semua isian pengaturan ke localStorage (tanpa validasi)
 function persistSettings() {
+  if (apiProviderSelect) localStorage.setItem('verba_ai_provider', apiProviderSelect.value);
   if (apiKeyInput) localStorage.setItem('9router_api_key', apiKeyInput.value.trim());
   if (apiHostInput) localStorage.setItem('9router_api_host', apiHostInput.value.trim());
   if (modelSelect) localStorage.setItem('9router_model', modelSelect.value.trim());
@@ -1465,25 +1530,29 @@ function closeHistoryDrawer() {
   setActiveTab(activeTab);
 }
 
-// Buka & Tutup Modal Pengaturan
+// Buka & Tutup Modal Pengaturan (Native Bottom Sheet di Mobile, Centered Modal di Desktop)
 function openSettingsModal() {
   if (!settingsModal || !settingsModalContent) return;
-  loadSettings();
-  loadModelOptions();
-  loadSttModelOptions();
   settingsModal.classList.remove('opacity-0', 'pointer-events-none');
-  settingsModalContent.classList.remove('scale-95');
-  settingsModalContent.classList.add('scale-100');
+  settingsModalContent.classList.remove('translate-y-full', 'sm:scale-95');
+  settingsModalContent.classList.add('translate-y-0', 'sm:scale-100');
   setActiveTab('pengaturan');
+  try {
+    loadSettings();
+    loadModelOptions();
+    loadSttModelOptions();
+  } catch (err) {
+    console.error('Gagal memuat detail pengaturan:', err);
+  }
 }
 
 function closeSettingsModal() {
   if (!settingsModal || !settingsModalContent) return;
-  settingsModalContent.classList.remove('scale-100');
-  settingsModalContent.classList.add('scale-95');
+  settingsModalContent.classList.remove('translate-y-0', 'sm:scale-100');
+  settingsModalContent.classList.add('translate-y-full', 'sm:scale-95');
   setTimeout(() => {
     settingsModal.classList.add('opacity-0', 'pointer-events-none');
-  }, 200);
+  }, 250);
   setActiveTab(activeTab);
 }
 
@@ -1824,9 +1893,16 @@ function attachEventListeners() {
   [apiHostInput, apiKeyInput, modelSelect, sttHostInput, sttKeyInput, sttModelInput, kokoroUrlInput, ttsModelInput, ttsVoiceInput].forEach((el) => {
     if (el) el.addEventListener('input', persistSettings);
   });
-  [sttProviderSelect, ttsProviderSelect].forEach((el) => {
+  [sttProviderSelect, ttsProviderSelect, apiProviderSelect].forEach((el) => {
     if (el) el.addEventListener('change', persistSettings);
   });
+
+  // Provider AI Selector Change
+  if (apiProviderSelect) {
+    apiProviderSelect.addEventListener('change', () => {
+      updateProviderUI(apiProviderSelect.value);
+    });
+  }
 
   // Muat ulang daftar model saat host/key berubah (dengan jeda) atau tombol ditekan
   let modelReloadTimer = null;
@@ -1860,13 +1936,13 @@ function attachEventListeners() {
     });
   }
 
-  // Simpan Pengaturan (9router API Key + Host Endpoint + LLM Model + Provider TTS)
+  // Simpan Pengaturan
   if (saveApiKeyBtn) {
     saveApiKeyBtn.addEventListener('click', () => {
       persistSettings();
 
       if (!apiHostInput || !apiHostInput.value.trim()) {
-        showToast('API Host wajib diisi (alamat server 9Router / API Anda).');
+        showToast('API Host wajib diisi (alamat server Gemini / 9Router / API Anda).');
         return;
       }
       if (!apiKeyInput || !apiKeyInput.value.trim()) {
@@ -1895,7 +1971,7 @@ function attachEventListeners() {
       };
 
       if (!apiHost) {
-        report(false, 'API Host masih kosong. Isi alamat server 9Router / API Anda, mis. https://9router.domainanda.com');
+        report(false, 'API Host masih kosong. Isi alamat server API Anda, mis. https://generativelanguage.googleapis.com/v1beta/openai atau https://9router.domainanda.com');
         return;
       }
       if (!apiKey) {
@@ -1903,7 +1979,7 @@ function attachEventListeners() {
         return;
       }
       if (!model) {
-        report(false, 'Model belum dipilih. Tekan "🔄 Muat model" lalu pilih salah satu.');
+        report(false, 'Model belum dipilih. Tekan "↻ Muat ulang" lalu pilih salah satu.');
         return;
       }
       const endpoint = resolveChatEndpoint(apiHost);
@@ -1915,10 +1991,11 @@ function attachEventListeners() {
       report(null, `Menghubungi ${endpoint} ...`);
       testConnectionBtn.disabled = true;
       try {
+        const cleanModel = model.replace(/^models\//i, '');
         const response = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-          body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Reply with: OK' }], max_tokens: 5 })
+          headers: getApiHeaders(apiKey, apiHost),
+          body: JSON.stringify({ model: cleanModel, messages: [{ role: 'user', content: 'Reply with: OK' }], max_tokens: 5 })
         });
         const body = await response.text();
         if (!response.ok) {

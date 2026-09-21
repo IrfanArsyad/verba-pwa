@@ -107,9 +107,29 @@ export function resolveApiUrl(host, path) {
   let url = (host || '').trim();
   if (!url) throw new Error('API Host belum diisi di Pengaturan.');
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  
+  // Jika host bertipe Google Generative Language API
+  if (url.includes('generativelanguage.googleapis.com')) {
+    return 'https://generativelanguage.googleapis.com/v1beta/openai' + path;
+  }
+
   url = url.replace(/\/+$/, '').replace(/\/(chat\/completions|audio\/[a-z]+)$/i, '');
   if (!/\/v\d+$/i.test(url)) url += '/v1';
   return url + path;
+}
+
+/**
+ * Buat header HTTP request (menambahkan X-Goog-Api-Key jika menggunakan Google Gemini).
+ */
+export function getApiHeaders(apiKey, host = '') {
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+    if ((host || '').includes('generativelanguage.googleapis.com')) {
+      headers['X-Goog-Api-Key'] = apiKey;
+    }
+  }
+  return headers;
 }
 
 /**
@@ -152,12 +172,14 @@ The JSON schema MUST follow this exact structure:
 export async function generateVocabulary(apiKey, options = {}) {
   const endpoint = resolveChatEndpoint(options.endpoint);
   const count = options.count || 5;
+  const rawModel = options.model || 'gemini-1.5-flash';
+  const model = rawModel.replace(/^models\//i, '');
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    headers: getApiHeaders(apiKey, options.endpoint),
     body: JSON.stringify({
-      model: options.model,
+      model,
       messages: [
         { role: 'system', content: buildVocabPrompt(options.sourceLang, options.targetLang, count, options.avoid || []) },
         { role: 'user', content: `Give me ${count} new words for today (${new Date().toDateString()}).` }
@@ -292,12 +314,28 @@ export const VocabManager = {
  * @returns {Promise<string[]>} ID model, terurut
  */
 export async function listModels(host, apiKey) {
+  const isGemini = (host || '').includes('generativelanguage.googleapis.com');
+  if (isGemini) {
+    if (apiKey) {
+      try {
+        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+        if (resp.ok) {
+          const json = await resp.json();
+          const models = (json.models || [])
+            .filter((m) => !m.supportedGenerationMethods || m.supportedGenerationMethods.includes('generateContent'))
+            .map((m) => (m.name || '').replace(/^models\//i, ''))
+            .filter((name) => name.startsWith('gemini'));
+          if (models.length) return [...new Set(models)].sort((a, b) => a.localeCompare(b));
+        }
+      } catch (_) { /* fallback ke list manual */ }
+    }
+    return ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash'];
+  }
+
   const endpoint = resolveApiUrl(host, '/models');
   let response;
   try {
-    response = await fetch(endpoint, {
-      headers: apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}
-    });
+    response = await fetch(endpoint, { headers: getApiHeaders(apiKey, host) });
   } catch (err) {
     throw new Error(`Tidak bisa menghubungi ${endpoint}. Cek domain (harus https & bisa diakses dari HP) atau izin CORS server. (${err.message})`);
   }
@@ -316,7 +354,7 @@ export async function listModels(host, apiKey) {
   }
   const items = Array.isArray(data) ? data : (data.data || data.models || []);
   const ids = items.map((m) => (typeof m === 'string' ? m : m.id || m.name)).filter(Boolean);
-  return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
+  return ids.length ? [...new Set(ids)].sort((a, b) => a.localeCompare(b)) : [];
 }
 
 /**
@@ -328,24 +366,22 @@ export async function listModels(host, apiKey) {
  */
 export async function processIndonesianToEnglish(indonesianInput, apiKey, options = {}) {
   const endpoint = resolveChatEndpoint(options.endpoint);
-  const model = options.model || 'deepseek/deepseek-chat';
+  const rawModel = options.model || 'deepseek/deepseek-chat';
+  const model = rawModel.replace(/^models\//i, '');
 
   // Validasi API Key
   if (!apiKey) {
     return createFallbackResponse(
       indonesianInput,
-      'API Key 9router belum dikonfigurasi.',
-      'Silakan masukkan 9router API Key Anda di pengaturan aplikasi.'
+      'API Key belum dikonfigurasi.',
+      'Silakan masukkan API Key Anda di pengaturan aplikasi.'
     );
   }
 
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
+      headers: getApiHeaders(apiKey, options.endpoint),
       body: JSON.stringify({
         model: model,
         messages: [
@@ -358,7 +394,7 @@ export async function processIndonesianToEnglish(indonesianInput, apiKey, option
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('9router API Error:', response.status, errText);
+      console.error('LLM API Error:', response.status, errText);
       return createFallbackResponse(
         indonesianInput,
         'Gagal menghubungkan ke layanan AI.',
@@ -397,9 +433,9 @@ export async function processChatConversation(messages = [], apiKey, options = {
   // Validasi API Key
   if (!apiKey) {
     return createChatFallbackResponse(
-      'Sorry, 9router API Key is not configured yet.',
+      'Sorry, API Key is not configured yet.',
       'Silakan masukkan API Key Anda pada pengaturan aplikasi.',
-      'API Key 9router belum dikonfigurasi.'
+      'API Key belum dikonfigurasi.'
     );
   }
 
