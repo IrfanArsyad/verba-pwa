@@ -1,17 +1,21 @@
-name: "CI/CD Auto Deploy to Homelab"
+name: CI-CD Auto Deploy to Homelab
 
 on:
   push:
     branches:
-      - release # 👈 CI/CD HANYA berjalan saat ada push/merge ke branch 'release'
-      
+      - release
+
+jobs:
+  deploy:
+    name: Deploy via Cloudflare Tunnel
+    runs-on: ubuntu-latest
+
     steps:
-      # 1. Install cloudflared CLI di Runner GitHub
       - name: Install Cloudflare Client
         run: |
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared.deb
-      # 2. Tembus Cloudflare Tunnel & Jalankan Perintah di Homelab
+
       - name: SSH and Deploy to Homelab
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -19,18 +23,10 @@ on:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
-          # Magic Line: Membuat SSH menembus Cloudflare Tunnel
           proxy_cmd: "cloudflared access ssh --hostname %h"
           script: |
-            # 💡 UBAH /opt/verba-ai SESUAI HASIL PERINTAH 'pwd' DI LANGKAH 4
             cd /opt/verba-ai
-
-            # Tarik kode terbaru dari branch release
             git checkout release
             git pull origin release
-
-            # Rebuild Docker container dengan kode baru
             docker compose up -d --build
-
-            # Bersihkan image sisa/lama agar disk Homelab tidak penuh
             docker image prune -f
