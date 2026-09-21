@@ -25,7 +25,7 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
           proxy_cmd: "cloudflared access ssh --hostname %h"
           script: |
-            cd /opt/verba-ai
+            cd /home/fanz/Projects/studiolab/verba-pwa
             git checkout release
             git pull origin release
             docker compose up -d --build
