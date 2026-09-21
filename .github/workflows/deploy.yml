@@ -1,71 +1,36 @@
-# Deploy otomatis saat ada push ke branch release.
-#
-# Berjalan di self-hosted runner yang terpasang di server itu sendiri, jadi
-# tidak ada koneksi masuk dari internet dan tidak butuh secret SSH.
-#
-# Path repo bisa diatur lewat repository variable DEPLOY_PATH
-# (default: /home/fanz/Projects/studiolab/verba-pwa).
-
-name: Deploy
+name: "CI/CD Auto Deploy to Homelab"
 
 on:
   push:
-    branches: [release]
-  workflow_dispatch:
-
-# Satu deploy dalam satu waktu. Deploy tidak dibatalkan di tengah jalan supaya
-# stack docker tidak ditinggal dalam keadaan setengah jadi.
-concurrency:
-  group: deploy-release
-  cancel-in-progress: false
-
-jobs:
-  deploy:
-    name: Build & restart stack
-    runs-on: self-hosted
-    timeout-minutes: 15
-
-    # Sengaja tanpa actions/checkout: deploy dijalankan di checkout yang sudah
-    # ada di server, bukan di workspace runner. Workspace runner tidak punya
-    # deploy/cloudflared/credentials.json (untracked) dan stack docker yang
-    # sedang jalan terikat ke direktori tersebut.
+    branches:
+      - release # 👈 CI/CD HANYA berjalan saat ada push/merge ke branch 'release'
+      
     steps:
-      - name: Sync ke commit pemicu
-        env:
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/home/fanz/Projects/studiolab/verba-pwa' }}
+      # 1. Install cloudflared CLI di Runner GitHub
+      - name: Install Cloudflare Client
         run: |
-          deploy_path="$DEPLOY_PATH"
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+      # 2. Tembus Cloudflare Tunnel & Jalankan Perintah di Homelab
+      - name: SSH and Deploy to Homelab
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          # Magic Line: Membuat SSH menembus Cloudflare Tunnel
+          proxy_cmd: "cloudflared access ssh --hostname %h"
+          script: |
+            # 💡 UBAH /opt/verba-ai SESUAI HASIL PERINTAH 'pwd' DI LANGKAH 4
+            cd /opt/verba-ai
 
-          # `~` tidak diekspansi saat path datang dari variabel, jadi lakukan manual.
-          case "$deploy_path" in
-            "~")   deploy_path="$HOME" ;;
-            "~/"*) deploy_path="$HOME/${deploy_path#\~/}" ;;
-          esac
+            # Tarik kode terbaru dari branch release
+            git checkout release
+            git pull origin release
 
-          if [[ ! -d "$deploy_path/.git" ]]; then
-            echo "Tidak ada repo git di $deploy_path" >&2
-            exit 1
-          fi
-          echo "DEPLOY_DIR=$deploy_path" >> "$GITHUB_ENV"
-          cd "$deploy_path"
+            # Rebuild Docker container dengan kode baru
+            docker compose up -d --build
 
-          git fetch --prune origin release
-          # Reset ke SHA persis yang memicu workflow, bukan ke origin/release,
-          # supaya push beruntun tidak saling mendahului.
-          # -f wajib: tanpa itu checkout batal kalau ada file terlacak yang
-          # pernah diedit manual di server. File untracked tidak ikut terhapus.
-          git checkout -f -B release "$GITHUB_SHA"
-          # Sengaja tanpa `git clean`: deploy/cloudflared/credentials.json tidak
-          # dilacak git dan akan terhapus kalau working tree dibersihkan.
-
-      - name: Build image & restart stack
-        run: |
-          cd "$DEPLOY_DIR"
-          ./deploy.sh
-
-      - name: Laporkan versi yang jalan
-        if: always()
-        run: |
-          cd "$DEPLOY_DIR"
-          echo "HEAD: $(git rev-parse --short HEAD) ($(git log -1 --format=%s))"
-          docker compose ps
+            # Bersihkan image sisa/lama agar disk Homelab tidak penuh
+            docker image prune -f
